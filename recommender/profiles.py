@@ -43,6 +43,7 @@ class QuestionProfile:
 
 
 
+# TODO add lexical/term profile
 class UserProfile:
     def __init__(self, id):
         self.id = id

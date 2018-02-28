@@ -50,6 +50,17 @@ class UserProfile:
         self.interests = SimpleNamespace(tags=None, topics=None, terms=None)
         self.expertise = SimpleNamespace(tags=None, topics=None, terms=None)
 
+    def _get_topics(self):
+        try:
+            return self.__topics
+        except AttributeError:
+            with psql:
+                cur = psql.cursor()
+                cur.execute('SELECT DISTINCT topic_id FROM mls_question_topics WHERE site_id = %s ORDER BY topic_id',
+                            (config.site_id,))
+                self.__topics = [topic[0] for topic in cur]
+            return self.__topics
+
     def _get_question_profiles(self, question_query):
         with psql:
             cur = psql.cursor()
@@ -67,17 +78,31 @@ class UserProfile:
         return [(tag, val/total) for tag, val in tag_counts.items()]
 
     def _get_topic_weights(self, weighted_qlists):
-        topic_distributions = defaultdict(list)
+        topic_list = self._get_topics()
+        topic_distributions = {t: [] for t in topic_list}
+        topic_weights = {t: [] for t in topic_list}
         question_count = 0
         for questions, q_weight in weighted_qlists:
             question_count += len(questions)
             for q in questions:
                 for topic, weight in q.topics():
-                    topic_distributions[topic].append(weight * q_weight)
+                    topic_distributions[topic].append(weight)
 
+            # Add specific q_weights of questions to all topics
+            for t in topic_list:
+                topic_weights[t] +=  [abs(q_weight)] * (len(questions))
+
+        # Fill missing Q-topic associations with zeros
         for k in topic_distributions:
             topic_distributions[k] += [0] * (question_count - len(topic_distributions[k]))
-            topic_distributions[k] = numpy.mean(topic_distributions[k])
+
+        # Calculate weighted average
+        for k in topic_distributions:
+            assert len(topic_distributions[k]) == len(topic_weights[k]), "Different lengths"
+            try:
+                topic_distributions[k] = numpy.average(topic_distributions[k], weights=topic_weights[k])
+            except ZeroDivisionError:
+                topic_distributions[k] = 0
 
         return list(topic_distributions.items())
 
@@ -102,7 +127,7 @@ class UserProfile:
         expertise_weighted_qlists = [
             (positive_answers, 1),
             (negative_answers, -1),
-            (accepted_answers, 1.5),
+            (accepted_answers, 1.75),
             (commented_questions, .3),
         ]
 

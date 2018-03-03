@@ -1,7 +1,10 @@
-from collections import Counter, defaultdict
+import itertools
+import operator
+from collections import Counter
 from types import SimpleNamespace
 from recommender import config, models, psql, utils
 import numpy
+from scipy.sparse import csr_matrix
 
 @utils.memoize
 class QuestionProfile:
@@ -106,6 +109,18 @@ class UserProfile:
 
         return list(topic_distributions.items())
 
+    def _get_term_weights(self, weighted_qlists):
+        # Flatten Q list and normalize Q weights
+        weighted_questions = list((q, weight) for qlist, weight in weighted_qlists for q in qlist)
+        weights_sum = sum(abs(w) for _, w in weighted_questions)
+        weighted_questions_norm = ((q, float(w)/weights_sum) for q, w in weighted_questions)
+
+        user_terms = csr_matrix((1, config.term_vocabulary_size), dtype=numpy.int64)
+        for q_terms in itertools.starmap(operator.mul, ((q.terms(), w) for q, w in weighted_questions_norm)):
+            user_terms += q_terms
+
+        return user_terms
+
     def train(self):
         # TODO add favorited questions
         asked_questions = self._get_question_profiles('SELECT id FROM questions WHERE removed IS NULL AND owner_id = %(user_id)s')
@@ -136,5 +151,8 @@ class UserProfile:
 
         self.interests.topics = self._get_topic_weights(interests_weighted_qlists)
         self.expertise.topics = self._get_topic_weights(expertise_weighted_qlists)
+
+        self.interests.terms = self._get_term_weights(interests_weighted_qlists)
+        self.expertise.terms = self._get_term_weights(expertise_weighted_qlists)
 
 

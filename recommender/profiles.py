@@ -5,6 +5,8 @@ from types import SimpleNamespace
 from recommender import config, models, psql, utils
 import numpy
 from scipy.sparse import csr_matrix
+from sklearn.externals import joblib
+from pathlib import Path
 
 @utils.memoize
 class QuestionProfile:
@@ -52,6 +54,20 @@ class UserProfile:
         self.id = id
         self.interests = SimpleNamespace(tags=None, topics=None, terms=None)
         self.expertise = SimpleNamespace(tags=None, topics=None, terms=None)
+
+    def save(self):
+        model_dir = Path('.') / config.models['dir'] / config.models['user-dir']
+        if not model_dir.exists():
+            model_dir.mkdir(parents=True)
+        model_file = model_dir / '{}.pkl'.format(self.id)
+        return joblib.dump(self, model_file)
+
+    @classmethod
+    def load(cls, id):
+        model_file = Path('.') / config.models['dir'] / config.models['user-dir'] / '{}.pkl'.format(id)
+        if model_file.exists():
+            return joblib.load(model_file)
+        return cls(id)
 
     def _get_topics(self):
         try:

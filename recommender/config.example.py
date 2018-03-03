@@ -11,8 +11,11 @@ DB.password = ''
 models = {
     'dir': 'models',
     'lda-topics': 'lda-topics.pkl',
-    'term-vocab': 'term-vocab.pkl'
+    'term-vocab': 'term-vocab.pkl',
+    'user-dir': 'users',
 }
 
 question_profile = SimpleNamespace()
 question_profile.lda_threshold_percentile = 25
+
+term_vocabulary_size = 150000

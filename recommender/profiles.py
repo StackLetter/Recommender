@@ -1,12 +1,12 @@
 import itertools
-import operator
+from operator import mul
 from collections import Counter
 from types import SimpleNamespace
 from recommender import config, models, psql, utils
 import numpy
-from scipy.sparse import csr_matrix
 from sklearn.externals import joblib
 from pathlib import Path
+from datetime import datetime
 
 @utils.memoize
 class QuestionProfile:
@@ -48,12 +48,13 @@ class QuestionProfile:
 
 
 
-# TODO add lexical/term profile
 class UserProfile:
     def __init__(self, id):
         self.id = id
-        self.interests = SimpleNamespace(tags=None, topics=None, terms=None)
-        self.expertise = SimpleNamespace(tags=None, topics=None, terms=None)
+        self.iterations = 0
+        self.since = None
+        self.interests = SimpleNamespace(tags=None, topics=None, terms=None, total=0)
+        self.expertise = SimpleNamespace(tags=None, topics=None, terms=None, total=0)
 
     def save(self):
         model_dir = Path('.') / config.models['dir'] / config.models['user-dir']
@@ -80,21 +81,61 @@ class UserProfile:
                 self.__topics = [topic[0] for topic in cur]
             return self.__topics
 
-    def _get_question_profiles(self, question_query):
+    def _get_question_profiles(self, question_query, since=None):
+        params = {'user_id': self.id}
+        since_query = 'AND created_at > %(since)s' if since else ''
+        if since:
+            params['since'] = since
         with psql:
             cur = psql.cursor()
-            cur.execute(question_query, {'user_id': self.id})
+            cur.execute(question_query.format(since=since_query), params)
             return [QuestionProfile(question[0]) for question in cur]
+
+    def _get_qlists(self, since=None):
+        # TODO add favorited questions
+        asked_qs = self._get_question_profiles("""
+            SELECT id FROM questions
+            WHERE removed IS NULL AND owner_id = %(user_id)s {since}""", since)
+        commented_qs = self._get_question_profiles("""
+            SELECT question_id AS id FROM comments
+            WHERE removed IS NULL AND question_id IS NOT NULL
+            AND owner_id = %(user_id)s {since} UNION
+            SELECT question_id AS id FROM answers
+            WHERE removed IS NULL AND id IN (
+                SELECT answer_id AS id FROM comments
+                WHERE removed IS NULL AND question_id IS NULL
+                AND owner_id = %(user_id)s {since})""", since)
+
+        answer_query_base = 'SELECT question_id FROM answers WHERE removed IS NULL AND owner_id = %(user_id)s {since}'
+        positive_as = self._get_question_profiles(answer_query_base + ' AND score >= 0', since)
+        negative_as = self._get_question_profiles(answer_query_base + ' AND score < 0', since)
+        accepted_as = self._get_question_profiles(answer_query_base + ' AND is_accepted', since)
+
+        interests = [
+            (asked_qs,      1.00),
+            (commented_qs,  0.30),
+        ]
+        expertise = [
+            (positive_as,   1.00),
+            (negative_as,  -1.00),
+            (accepted_as,   1.75),
+            (commented_qs,  0.30),
+        ]
+        return interests, expertise
+
+    def _sum_weighted_qlists(self, qlists):
+        return sum(len(qlist) * abs(weight) for qlist, weight in qlists)
 
     def _get_tag_weights(self, weighted_qlists):
         tag_counts = Counter()
-        total = 0
         for questions, weight in weighted_qlists:
-            total += len(questions)
             for q in questions:
                 for tag in q.tags():
                     tag_counts[tag] += 1 * weight
-        return [(tag, val/total) for tag, val in tag_counts.items()]
+
+        # Normalize values to 0..1
+        total = sum(tag_counts.values())
+        return [(tag, val/total) for tag, val in tag_counts.items()], total
 
     def _get_topic_weights(self, weighted_qlists):
         topic_list = self._get_topics()
@@ -109,66 +150,79 @@ class UserProfile:
 
             # Add specific q_weights of questions to all topics
             for t in topic_list:
-                topic_weights[t] +=  [abs(q_weight)] * (len(questions))
+                topic_weights[t] += [abs(q_weight)] * (len(questions))
 
         # Fill missing Q-topic associations with zeros
-        for k in topic_distributions:
-            topic_distributions[k] += [0] * (question_count - len(topic_distributions[k]))
+        for t in topic_distributions:
+            topic_distributions[t] += [0] * (question_count - len(topic_distributions[t]))
 
         # Calculate weighted average
-        for k in topic_distributions:
-            assert len(topic_distributions[k]) == len(topic_weights[k]), "Different lengths"
+        for t in topic_distributions:
+            assert len(topic_distributions[t]) == len(topic_weights[t]), "Different lengths"
             try:
-                topic_distributions[k] = numpy.average(topic_distributions[k], weights=topic_weights[k])
+                topic_distributions[t] = numpy.average(topic_distributions[t], weights=topic_weights[t])
             except ZeroDivisionError:
-                topic_distributions[k] = 0
+                topic_distributions[t] = 0
 
-        return list(topic_distributions.items())
+        # Normalize values to 0..1
+        total = sum(topic_distributions.values())
+        return [(topic, weight/total) for topic, weight in topic_distributions.items()], total
 
     def _get_term_weights(self, weighted_qlists):
         # Flatten Q list and normalize Q weights
-        weighted_questions = list((q, weight) for qlist, weight in weighted_qlists for q in qlist)
+        weighted_questions = [(q, weight) for qlist, weight in weighted_qlists for q in qlist]
         weights_sum = sum(abs(w) for _, w in weighted_questions)
         weighted_questions_norm = ((q, float(w)/weights_sum) for q, w in weighted_questions)
-
-        user_terms = csr_matrix((1, config.term_vocabulary_size), dtype=numpy.int64)
-        for q_terms in itertools.starmap(operator.mul, ((q.terms(), w) for q, w in weighted_questions_norm)):
-            user_terms += q_terms
-
-        return user_terms
+        return sum(itertools.starmap(mul, ((q.terms(), w) for q, w in weighted_questions_norm))), weights_sum
 
     def train(self):
-        # TODO add favorited questions
-        asked_questions = self._get_question_profiles('SELECT id FROM questions WHERE removed IS NULL AND owner_id = %(user_id)s')
-        commented_questions = self._get_question_profiles("""
-            WITH commented_answers AS (SELECT answer_id AS id FROM comments WHERE removed IS NULL AND question_id IS NULL AND owner_id = %(user_id)s)
-            SELECT question_id AS id FROM comments WHERE removed IS NULL AND question_id IS NOT NULL AND owner_id = %(user_id)s
-            UNION SELECT question_id AS id FROM answers WHERE removed IS NULL AND id IN (SELECT id FROM commented_answers)""")
+        interests_qlists, expertise_qlists = self._get_qlists()
 
-        answer_query_base = 'SELECT question_id FROM answers WHERE removed IS NULL AND owner_id = %(user_id)s'
-        positive_answers = self._get_question_profiles(answer_query_base + ' AND score >= 0')
-        negative_answers = self._get_question_profiles(answer_query_base + ' AND score < 0')
-        accepted_answers = self._get_question_profiles(answer_query_base + ' AND is_accepted')
+        self.interests.tags = self._get_tag_weights(interests_qlists)
+        self.expertise.tags = self._get_tag_weights(expertise_qlists)
 
-        interests_weighted_qlists = [
-            (asked_questions, 1),
-            (commented_questions, .3),
-        ]
+        self.interests.topics = self._get_topic_weights(interests_qlists)
+        self.expertise.topics = self._get_topic_weights(expertise_qlists)
 
-        expertise_weighted_qlists = [
-            (positive_answers, 1),
-            (negative_answers, -1),
-            (accepted_answers, 1.75),
-            (commented_questions, .3),
-        ]
+        self.interests.terms = self._get_term_weights(interests_qlists)
+        self.expertise.terms = self._get_term_weights(expertise_qlists)
 
-        self.interests.tags = self._get_tag_weights(interests_weighted_qlists)
-        self.expertise.tags = self._get_tag_weights(expertise_weighted_qlists)
+        self.interests.total = self._sum_weighted_qlists(interests_qlists)
+        self.expertise.total = self._sum_weighted_qlists(expertise_qlists)
 
-        self.interests.topics = self._get_topic_weights(interests_weighted_qlists)
-        self.expertise.topics = self._get_topic_weights(expertise_weighted_qlists)
-
-        self.interests.terms = self._get_term_weights(interests_weighted_qlists)
-        self.expertise.terms = self._get_term_weights(expertise_weighted_qlists)
+        self.since = datetime.now()
+        self.iterations += 1
 
 
+    def retrain(self, since=None):
+        def merge_lists(old, new):
+            sum_w = old[1] + new[1]
+            res = Counter({k: v * old[1] for k, v in old[0]})
+            for k, v in new[0]:
+                res[k] += v * new[1] / sum_w
+            return res.items(), sum_w
+
+        def merge_matrices(old, new):
+            sum_w = old[1] + new[1]
+            return (mul(*old) + mul(*new)) / sum_w, sum_w
+
+        if not since:
+            since = self.since
+        interests_qlists, expertise_qlists = self._get_qlists(since)
+
+        # TODO apply exponential decay factor
+
+        self.interests.tags = merge_lists(self.interests.tags, self._get_tag_weights(interests_qlists))
+        self.expertise.tags = merge_lists(self.expertise.tags, self._get_tag_weights(expertise_qlists))
+
+        self.interests.topics = merge_lists(self.interests.topics, self._get_topic_weights(interests_qlists))
+        self.expertise.topics = merge_lists(self.expertise.topics, self._get_topic_weights(expertise_qlists))
+
+        self.interests.terms = merge_matrices(self.interests.terms, self._get_term_weights(interests_qlists))
+        self.expertise.terms = merge_matrices(self.expertise.terms, self._get_term_weights(expertise_qlists))
+
+        self.interests.total += self._sum_weighted_qlists(interests_qlists)
+        self.expertise.total += self._sum_weighted_qlists(expertise_qlists)
+
+        self.since = datetime.now()
+        self.iterations += 1

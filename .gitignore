@@ -1,5 +1,5 @@
 env/
-models/*.pkl
+models/**/*.pkl
 recommender/config.py
 .idea
 __pycache__

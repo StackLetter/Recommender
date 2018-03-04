@@ -1,14 +1,17 @@
 import itertools
-from operator import mul
+import operator
 from collections import Counter
 from types import SimpleNamespace
-from recommender import config, models, psql, utils
+from recommender import config, models, psql
 import numpy
 from sklearn.externals import joblib
+import scipy.sparse as sparse
 from pathlib import Path
 from datetime import datetime
+from cachetools import LFUCache, cached
 
-@utils.memoize
+
+@cached(cache=LFUCache(maxsize=100))
 class QuestionProfile:
 
     def __init__(self, id):
@@ -168,12 +171,11 @@ class UserProfile:
         total = sum(topic_distributions.values())
         return [(topic, weight/total) for topic, weight in topic_distributions.items()], total
 
-    def _get_term_weights(self, weighted_qlists):
-        # Flatten Q list and normalize Q weights
+    def _get_tf_matrix(self, weighted_qlists):
+        # Flatten Q list
         weighted_questions = [(q, weight) for qlist, weight in weighted_qlists for q in qlist]
-        weights_sum = sum(abs(w) for _, w in weighted_questions)
-        weighted_questions_norm = ((q, float(w)/weights_sum) for q, w in weighted_questions)
-        return sum(itertools.starmap(mul, ((q.terms(), w) for q, w in weighted_questions_norm))), weights_sum
+        # Create TF matrix while applying Q weights
+        return sparse.vstack(itertools.starmap(operator.mul, ((q.terms(), w) for q, w in weighted_questions)), 'csr')
 
     def train(self):
         interests_qlists, expertise_qlists = self._get_qlists()
@@ -184,8 +186,8 @@ class UserProfile:
         self.interests.topics = self._get_topic_weights(interests_qlists)
         self.expertise.topics = self._get_topic_weights(expertise_qlists)
 
-        self.interests.terms = self._get_term_weights(interests_qlists)
-        self.expertise.terms = self._get_term_weights(expertise_qlists)
+        self.interests.terms = self._get_tf_matrix(interests_qlists)
+        self.expertise.terms = self._get_tf_matrix(expertise_qlists)
 
         self.interests.total = self._sum_weighted_qlists(interests_qlists)
         self.expertise.total = self._sum_weighted_qlists(expertise_qlists)
@@ -202,13 +204,12 @@ class UserProfile:
                 res[k] += v * new[1] / sum_w
             return res.items(), sum_w
 
-        def merge_matrices(old, new):
-            sum_w = old[1] + new[1]
-            return (mul(*old) + mul(*new)) / sum_w, sum_w
-
         if not since:
             since = self.since
         interests_qlists, expertise_qlists = self._get_qlists(since)
+
+        interests_total = self._sum_weighted_qlists(interests_qlists)
+        expertise_total = self._sum_weighted_qlists(expertise_qlists)
 
         # TODO apply exponential decay factor
 
@@ -218,11 +219,11 @@ class UserProfile:
         self.interests.topics = merge_lists(self.interests.topics, self._get_topic_weights(interests_qlists))
         self.expertise.topics = merge_lists(self.expertise.topics, self._get_topic_weights(expertise_qlists))
 
-        self.interests.terms = merge_matrices(self.interests.terms, self._get_term_weights(interests_qlists))
-        self.expertise.terms = merge_matrices(self.expertise.terms, self._get_term_weights(expertise_qlists))
+        self.interests.terms = sparse.bmat([[self.interests.terms], self._get_tf_matrix(interests_qlists)])
+        self.expertise.terms = sparse.bmat([[self.expertise.terms], self._get_tf_matrix(expertise_qlists)])
 
-        self.interests.total += self._sum_weighted_qlists(interests_qlists)
-        self.expertise.total += self._sum_weighted_qlists(expertise_qlists)
+        self.interests.total += interests_total
+        self.expertise.total += expertise_total
 
         self.since = datetime.now()
         self.iterations += 1

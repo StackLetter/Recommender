@@ -5,6 +5,7 @@ from types import SimpleNamespace
 from recommender import config, models, psql
 import numpy
 from sklearn.externals import joblib
+from sklearn.feature_extraction.text import TfidfTransformer
 import scipy.sparse as sparse
 from pathlib import Path
 from datetime import datetime
@@ -56,8 +57,8 @@ class UserProfile:
         self.id = id
         self.iterations = 0
         self.since = None
-        self.interests = SimpleNamespace(tags=None, topics=None, terms=None, total=0)
-        self.expertise = SimpleNamespace(tags=None, topics=None, terms=None, total=0)
+        self.interests = SimpleNamespace(tags=None, topics=None, terms=None, tfidf=None, total=0)
+        self.expertise = SimpleNamespace(tags=None, topics=None, terms=None, tfidf=None, total=0)
 
     def save(self):
         model_dir = Path('.') / config.models['dir'] / config.models['user-dir']
@@ -129,6 +130,17 @@ class UserProfile:
     def _sum_weighted_qlists(self, qlists):
         return sum(len(qlist) * abs(weight) for qlist, weight in qlists)
 
+    def _sort_wlist(self, args):
+        lst, weight = args
+        return sorted(lst, key=lambda t: t[1], reverse=True), weight
+
+    def _merge_wlists(self, old, new):
+        sum_w = old[1] + new[1]
+        res = Counter({k: v * old[1] for k, v in old[0]})
+        for k, v in new[0]:
+            res[k] += v * new[1] / sum_w
+        return res.items(), sum_w
+
     def _get_tag_weights(self, weighted_qlists):
         tag_counts = Counter()
         for questions, weight in weighted_qlists:
@@ -177,53 +189,100 @@ class UserProfile:
         # Create TF matrix while applying Q weights
         return sparse.vstack(itertools.starmap(operator.mul, ((q.terms(), w) for q, w in weighted_questions)), 'csr')
 
+    def _calculate_tfidf(self, tf):
+        return TfidfTransformer().fit_transform(tf)
+
     def train(self):
-        interests_qlists, expertise_qlists = self._get_qlists()
+        int_qlists, exp_qlists = self._get_qlists()
 
-        self.interests.tags = self._get_tag_weights(interests_qlists)
-        self.expertise.tags = self._get_tag_weights(expertise_qlists)
+        self.interests.tags = self._get_tag_weights(int_qlists)
+        self.expertise.tags = self._get_tag_weights(exp_qlists)
 
-        self.interests.topics = self._get_topic_weights(interests_qlists)
-        self.expertise.topics = self._get_topic_weights(expertise_qlists)
+        self.interests.topics = self._get_topic_weights(int_qlists)
+        self.expertise.topics = self._get_topic_weights(exp_qlists)
 
-        self.interests.terms = self._get_tf_matrix(interests_qlists)
-        self.expertise.terms = self._get_tf_matrix(expertise_qlists)
+        self.interests.terms = self._get_tf_matrix(int_qlists)
+        self.expertise.terms = self._get_tf_matrix(exp_qlists)
 
-        self.interests.total = self._sum_weighted_qlists(interests_qlists)
-        self.expertise.total = self._sum_weighted_qlists(expertise_qlists)
+        self.interests.tfidf = self._calculate_tfidf(self.interests.terms)
+        self.expertise.tfidf = self._calculate_tfidf(self.expertise.terms)
+
+        self.interests.total = self._sum_weighted_qlists(int_qlists)
+        self.expertise.total = self._sum_weighted_qlists(exp_qlists)
 
         self.since = datetime.now()
         self.iterations += 1
 
-
     def retrain(self, since=None):
-        def merge_lists(old, new):
-            sum_w = old[1] + new[1]
-            res = Counter({k: v * old[1] for k, v in old[0]})
-            for k, v in new[0]:
-                res[k] += v * new[1] / sum_w
-            return res.items(), sum_w
 
         if not since:
             since = self.since
-        interests_qlists, expertise_qlists = self._get_qlists(since)
+        int_qlists, exp_qlists = self._get_qlists(since)
 
-        interests_total = self._sum_weighted_qlists(interests_qlists)
-        expertise_total = self._sum_weighted_qlists(expertise_qlists)
+        interests_total = self._sum_weighted_qlists(int_qlists)
+        expertise_total = self._sum_weighted_qlists(exp_qlists)
 
         # TODO apply exponential decay factor
 
-        self.interests.tags = merge_lists(self.interests.tags, self._get_tag_weights(interests_qlists))
-        self.expertise.tags = merge_lists(self.expertise.tags, self._get_tag_weights(expertise_qlists))
+        self.interests.tags = self._merge_wlists(self.interests.tags, self._get_tag_weights(int_qlists))
+        self.expertise.tags = self._merge_wlists(self.expertise.tags, self._get_tag_weights(exp_qlists))
 
-        self.interests.topics = merge_lists(self.interests.topics, self._get_topic_weights(interests_qlists))
-        self.expertise.topics = merge_lists(self.expertise.topics, self._get_topic_weights(expertise_qlists))
+        self.interests.topics = self._merge_wlists(self.interests.topics, self._get_topic_weights(int_qlists))
+        self.expertise.topics = self._merge_wlists(self.expertise.topics, self._get_topic_weights(exp_qlists))
 
-        self.interests.terms = sparse.bmat([[self.interests.terms], self._get_tf_matrix(interests_qlists)])
-        self.expertise.terms = sparse.bmat([[self.expertise.terms], self._get_tf_matrix(expertise_qlists)])
+        self.interests.terms = sparse.bmat([[self.interests.terms], [self._get_tf_matrix(int_qlists)]])
+        self.expertise.terms = sparse.bmat([[self.expertise.terms], [self._get_tf_matrix(exp_qlists)]])
+
+        self.interests.tfidf = self._calculate_tfidf(self.interests.terms)
+        self.expertise.tfidf = self._calculate_tfidf(self.expertise.terms)
 
         self.interests.total += interests_total
         self.expertise.total += expertise_total
 
         self.since = datetime.now()
         self.iterations += 1
+
+    def _get_profile_list(self, n, key, interests, expertise):
+        interests_list = getattr(self.interests, key)
+        expertise_list = getattr(self.expertise, key)
+
+        if interests and expertise:
+            res = self._merge_wlists(interests_list, expertise_list)
+        elif interests:
+            res = interests_list
+        elif expertise:
+            res = expertise_list
+        else:
+            return []
+
+        sorted_list, _ = self._sort_wlist(res)
+        length = len(sorted_list)
+        max_index = min(length, abs(n)) if n != -1 else length
+        return [t for t, _ in sorted_list[:max_index]]
+
+    def get_tags(self, n, interests=True, expertise=True):
+        return self._get_profile_list(n, 'tags', interests, expertise)
+
+    def get_topics(self, n, interests=True, expertise=True):
+        return self._get_profile_list(n, 'topics', interests, expertise)
+
+    def match_questions(self, qlist, interests=True, expertise=True):
+        q_index = [q.id for q in qlist]
+        q_matrix = self._calculate_tfidf(sparse.vstack((q.terms() for q in qlist), 'csr'))
+
+        if interests and expertise:
+            u_matrix = sparse.bmat([[self.interests.tfidf], [self.expertise.tfidf]])
+        elif interests:
+            u_matrix = self.interests.tfidf
+        elif expertise:
+            u_matrix = self.expertise.tfidf
+        else:
+            return []
+
+        # Calc mean values in user matrix along the '0' axis
+        u_vector = u_matrix.mean(0)
+
+        # Calc similarity (dot product) of Qs and user, return list of sorted Q-IDs
+        product = u_vector * q_matrix.T
+        sorted_list = sorted(zip(q_index, product.A[0]), key=lambda t: t[1], reverse=True)
+        return sorted_list

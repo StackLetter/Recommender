@@ -134,9 +134,9 @@ class UserProfile:
         lst, weight = args
         return sorted(lst, key=lambda t: t[1], reverse=True), weight
 
-    def _merge_wlists(self, old, new):
+    def _merge_wlists(self, old, new, decay_factor):
         sum_w = old[1] + new[1]
-        res = Counter({k: v * old[1] for k, v in old[0]})
+        res = Counter({k: v * old[1] * decay_factor for k, v in old[0]})
         for k, v in new[0]:
             res[k] += v * new[1] / sum_w
         return res.items(), sum_w
@@ -222,16 +222,19 @@ class UserProfile:
         interests_total = self._sum_weighted_qlists(int_qlists)
         expertise_total = self._sum_weighted_qlists(exp_qlists)
 
-        # TODO apply exponential decay factor
+        int_change = interests_total / (self.interests.total + interests_total)
+        exp_change = expertise_total / (self.expertise.total + expertise_total)
+        int_decay = (1 - int_change) ** max(self.iterations, 1)
+        exp_decay = (1 - exp_change) ** max(self.iterations, 1)
 
-        self.interests.tags = self._merge_wlists(self.interests.tags, self._get_tag_weights(int_qlists))
-        self.expertise.tags = self._merge_wlists(self.expertise.tags, self._get_tag_weights(exp_qlists))
+        self.interests.tags = self._merge_wlists(self.interests.tags, self._get_tag_weights(int_qlists), int_decay)
+        self.expertise.tags = self._merge_wlists(self.expertise.tags, self._get_tag_weights(exp_qlists), exp_decay)
 
-        self.interests.topics = self._merge_wlists(self.interests.topics, self._get_topic_weights(int_qlists))
-        self.expertise.topics = self._merge_wlists(self.expertise.topics, self._get_topic_weights(exp_qlists))
+        self.interests.topics = self._merge_wlists(self.interests.topics, self._get_topic_weights(int_qlists), int_decay)
+        self.expertise.topics = self._merge_wlists(self.expertise.topics, self._get_topic_weights(exp_qlists), exp_decay)
 
-        self.interests.terms = sparse.bmat([[self.interests.terms], [self._get_tf_matrix(int_qlists)]])
-        self.expertise.terms = sparse.bmat([[self.expertise.terms], [self._get_tf_matrix(exp_qlists)]])
+        self.interests.terms = sparse.bmat([[self.interests.terms * int_decay], [self._get_tf_matrix(int_qlists)]])
+        self.expertise.terms = sparse.bmat([[self.expertise.terms * exp_decay], [self._get_tf_matrix(exp_qlists)]])
 
         self.interests.tfidf = self._calculate_tfidf(self.interests.terms)
         self.expertise.tfidf = self._calculate_tfidf(self.expertise.terms)

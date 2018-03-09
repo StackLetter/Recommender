@@ -85,9 +85,9 @@ class UserProfile:
                 self.__topics = [topic[0] for topic in cur]
             return self.__topics
 
-    def _get_question_profiles(self, question_query, since=None):
+    def _get_question_profiles(self, question_query, since=None, since_table=''):
         params = {'user_id': self.id}
-        since_query = 'AND created_at > %(since)s' if since else ''
+        since_query = 'AND {}created_at > %(since)s'.format(since_table) if since else ''
         if since:
             params['since'] = since
         with psql:
@@ -96,7 +96,6 @@ class UserProfile:
             return [QuestionProfile(question[0]) for question in cur]
 
     def _get_qlists(self, since=None):
-        # TODO add favorited questions
         asked_qs = self._get_question_profiles("""
             SELECT id FROM questions
             WHERE removed IS NULL AND owner_id = %(user_id)s {since}""", since)
@@ -109,6 +108,9 @@ class UserProfile:
                 SELECT answer_id AS id FROM comments
                 WHERE removed IS NULL AND question_id IS NULL
                 AND owner_id = %(user_id)s {since})""", since)
+        favorited_qs = self._get_question_profiles("""SELECT q.id FROM user_favorites f
+            LEFT JOIN questions q ON q.external_id = f.external_id
+            WHERE f.user_id = %(user_id)s {since} AND q.id IS NOT NULL""", since, since_table='f.')
 
         answer_query_base = 'SELECT question_id FROM answers WHERE removed IS NULL AND owner_id = %(user_id)s {since}'
         positive_as = self._get_question_profiles(answer_query_base + ' AND score >= 0', since)
@@ -118,12 +120,14 @@ class UserProfile:
         interests = [
             (asked_qs,      1.00),
             (commented_qs,  0.30),
+            (favorited_qs,  1.00),
         ]
         expertise = [
             (positive_as,   1.00),
             (negative_as,  -1.00),
             (accepted_as,   1.75),
             (commented_qs,  0.30),
+            (favorited_qs,  1.00),
         ]
         return interests, expertise
 
@@ -150,6 +154,8 @@ class UserProfile:
 
         # Normalize values to 0..1
         total = sum(tag_counts.values())
+        if total == 0:
+            return [], 0
         return [(tag, val/total) for tag, val in tag_counts.items()], total
 
     def _get_topic_weights(self, weighted_qlists):
@@ -181,11 +187,16 @@ class UserProfile:
 
         # Normalize values to 0..1
         total = sum(topic_distributions.values())
+        if total == 0:
+            return [], 0
         return [(topic, weight/total) for topic, weight in topic_distributions.items()], total
 
     def _get_tf_matrix(self, weighted_qlists):
         # Flatten Q list
         weighted_questions = [(q, weight) for qlist, weight in weighted_qlists for q in qlist]
+        if len(weighted_questions) == 0:
+            return False
+
         # Create TF matrix while applying Q weights
         return sparse.vstack(itertools.starmap(operator.mul, ((q.terms(), w) for q, w in weighted_questions)), 'csr')
 
@@ -222,25 +233,25 @@ class UserProfile:
         interests_total = self._sum_weighted_qlists(int_qlists)
         expertise_total = self._sum_weighted_qlists(exp_qlists)
 
-        int_change = interests_total / (self.interests.total + interests_total)
-        exp_change = expertise_total / (self.expertise.total + expertise_total)
-        int_decay = (1 - int_change) ** max(self.iterations, 1)
-        exp_decay = (1 - exp_change) ** max(self.iterations, 1)
+        if interests_total > 0:
+            int_change = interests_total / (self.interests.total + interests_total)
+            int_decay = (1 - int_change) ** max(self.iterations, 1)
 
-        self.interests.tags = self._merge_wlists(self.interests.tags, self._get_tag_weights(int_qlists), int_decay)
-        self.expertise.tags = self._merge_wlists(self.expertise.tags, self._get_tag_weights(exp_qlists), exp_decay)
+            self.interests.tags = self._merge_wlists(self.interests.tags, self._get_tag_weights(int_qlists), int_decay)
+            self.interests.topics = self._merge_wlists(self.interests.topics, self._get_topic_weights(int_qlists), int_decay)
+            self.interests.terms = sparse.bmat([[self.interests.terms * int_decay], [self._get_tf_matrix(int_qlists)]])
+            self.interests.tfidf = self._calculate_tfidf(self.interests.terms)
+            self.interests.total += interests_total
 
-        self.interests.topics = self._merge_wlists(self.interests.topics, self._get_topic_weights(int_qlists), int_decay)
-        self.expertise.topics = self._merge_wlists(self.expertise.topics, self._get_topic_weights(exp_qlists), exp_decay)
+        if expertise_total > 0:
+            exp_change = expertise_total / (self.expertise.total + expertise_total)
+            exp_decay = (1 - exp_change) ** max(self.iterations, 1)
 
-        self.interests.terms = sparse.bmat([[self.interests.terms * int_decay], [self._get_tf_matrix(int_qlists)]])
-        self.expertise.terms = sparse.bmat([[self.expertise.terms * exp_decay], [self._get_tf_matrix(exp_qlists)]])
-
-        self.interests.tfidf = self._calculate_tfidf(self.interests.terms)
-        self.expertise.tfidf = self._calculate_tfidf(self.expertise.terms)
-
-        self.interests.total += interests_total
-        self.expertise.total += expertise_total
+            self.expertise.tags = self._merge_wlists(self.expertise.tags, self._get_tag_weights(exp_qlists), exp_decay)
+            self.expertise.topics = self._merge_wlists(self.expertise.topics, self._get_topic_weights(exp_qlists), exp_decay)
+            self.expertise.terms = sparse.bmat([[self.expertise.terms * exp_decay], [self._get_tf_matrix(exp_qlists)]])
+            self.expertise.tfidf = self._calculate_tfidf(self.expertise.terms)
+            self.expertise.total += expertise_total
 
         self.since = datetime.now()
         self.iterations += 1

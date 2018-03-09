@@ -110,17 +110,36 @@ class UserProfile:
                 AND owner_id = %(user_id)s {since})""", since)
         favorited_qs = self._get_question_profiles("""SELECT q.id FROM user_favorites f
             LEFT JOIN questions q ON q.external_id = f.external_id
-            WHERE f.user_id = %(user_id)s {since} AND q.id IS NOT NULL""", since, since_table='f.')
+            WHERE q.removed IS NULL AND f.user_id = %(user_id)s {since} AND q.id IS NOT NULL""", since, since_table='f.')
 
         answer_query_base = 'SELECT question_id FROM answers WHERE removed IS NULL AND owner_id = %(user_id)s {since}'
         positive_as = self._get_question_profiles(answer_query_base + ' AND score >= 0', since)
         negative_as = self._get_question_profiles(answer_query_base + ' AND score < 0', since)
         accepted_as = self._get_question_profiles(answer_query_base + ' AND is_accepted', since)
 
+        feedback_query_base = """SELECT e.content_detail::int FROM evaluation_newsletters e
+            LEFT JOIN newsletters n ON n.id = e.newsletter_id
+            WHERE n.user_id = %(user_id)s
+            AND e.content_type = 'question'
+            AND e.user_response_type = '{fb}'
+            {{since}}
+            UNION
+            SELECT a.question_id FROM evaluation_newsletters e
+            LEFT JOIN newsletters n ON n.id = e.newsletter_id
+            LEFT JOIN answers a ON a.id = e.content_detail::int
+            WHERE n.user_id = %(user_id)s
+            AND e.content_type = 'answer'
+            AND e.user_response_type = '{fb}'
+            {{since}}"""
+        implicit_fb = self._get_question_profiles(feedback_query_base.format(fb='click'), since, since_table='e.')
+        explicit_fb = self._get_question_profiles(feedback_query_base.format(fb='feedback'), since, since_table='e.')
+
         interests = [
             (asked_qs,      1.00),
             (commented_qs,  0.30),
             (favorited_qs,  1.00),
+            (implicit_fb,   0.30),
+            (explicit_fb,   1.00),
         ]
         expertise = [
             (positive_as,   1.00),
@@ -128,6 +147,8 @@ class UserProfile:
             (accepted_as,   1.75),
             (commented_qs,  0.30),
             (favorited_qs,  1.00),
+            (implicit_fb,   0.30),
+            (explicit_fb,   1.00),
         ]
         return interests, expertise
 

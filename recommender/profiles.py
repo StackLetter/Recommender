@@ -247,6 +247,9 @@ class UserProfile:
 
     def retrain(self, since=None):
 
+        if self.iterations == 0:
+            return self.train()
+
         if not since:
             since = self.since
         int_qlists, exp_qlists = self._get_qlists(since)

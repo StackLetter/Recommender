@@ -14,7 +14,11 @@ from recommender import train, psql, config
 
 with psql:
     cur = psql.cursor()
-    cur.execute("SELECT id, title, body FROM questions WHERE site_id = %s AND removed is NULL AND created_at >= now() - interval '%s days';", (config.site_id, days))
+    cur.execute("""
+    SELECT id, title, body FROM questions
+    WHERE site_id = %s AND removed IS NULL
+    AND created_at >= now() - interval '%s days'
+    AND id NOT IN (SELECT DISTINCT question_id FROM mls_question_topics)""", (config.site_id, days))
 
     i = 0
     for question in cur:

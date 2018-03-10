@@ -22,9 +22,27 @@ WITH question_ids AS (
         UNION
         -- Comments on answers
         SELECT question_id AS id FROM answers WHERE id IN (SELECT id FROM commented_answers)
+        UNION
+        -- Favorited questions
+        SELECT q.id AS id FROM user_favorites f
+        LEFT JOIN questions q ON q.external_id = f.external_id
+        WHERE q.id IS NOT NULL
+        UNION
+        -- Questions with feedback
+        SELECT e.content_detail::int AS id FROM evaluation_newsletters e
+        LEFT JOIN newsletters n ON n.id = e.newsletter_id
+        WHERE e.content_type = 'question' AND e.user_response_type IN ('click', 'feedback')
+        AND n.user_id IN (SELECT id FROM site_users)
+        UNION
+        -- Answers with feedback
+        SELECT a.question_id AS id FROM evaluation_newsletters e
+        LEFT JOIN newsletters n ON n.id = e.newsletter_id
+        LEFT JOIN answers a ON a.id = e.content_detail::int
+        WHERE e.content_type = 'answer' AND e.user_response_type IN ('click', 'feedback')
+        AND n.user_id IN (SELECT id FROM site_users)
     ) united
 )
-SELECT id, title, body FROM questions WHERE id IN (SELECT id FROM question_ids);
+SELECT id, title, body FROM questions WHERE id IN (SELECT id FROM question_ids) AND removed IS NULL;
 """, (config.site_id,))
 
     for question in cur:

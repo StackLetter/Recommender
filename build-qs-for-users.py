@@ -42,7 +42,10 @@ WITH question_ids AS (
         AND n.user_id IN (SELECT id FROM site_users)
     ) united
 )
-SELECT id, title, body FROM questions WHERE id IN (SELECT id FROM question_ids) AND removed IS NULL;
+SELECT id, title, body FROM questions
+WHERE id IN (SELECT id FROM question_ids)
+AND id NOT IN (SELECT DISTINCT question_id FROM mls_question_topics)
+AND removed IS NULL;
 """, (config.site_id,))
 
     for question in cur:

@@ -8,6 +8,7 @@ with psql:
     cur.execute('SELECT id FROM users WHERE account_id IS NOT NULL AND site_id = %s', (config.site_id,))
     for uid in cur:
         user = UserProfile.load(uid[0])
+        print(user.id)
         user.retrain()
         user.save()
 

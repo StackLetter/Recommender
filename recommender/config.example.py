@@ -15,6 +15,8 @@ models = {
     'user-dir': 'users',
 }
 
+archive_dir = 'archive'
+
 question_profile = SimpleNamespace()
 question_profile.lda_threshold_percentile = 25
 

@@ -60,7 +60,9 @@ class UserProfile:
         self.interests = SimpleNamespace(tags=None, topics=None, terms=None, tfidf=None, total=0)
         self.expertise = SimpleNamespace(tags=None, topics=None, terms=None, tfidf=None, total=0)
 
-    def save(self):
+    def save(self, file_path=None):
+        if file_path:
+            return joblib.dump(self, file_path)
         model_dir = Path('.') / config.models['dir'] / config.models['user-dir']
         if not model_dir.exists():
             model_dir.mkdir(parents=True)

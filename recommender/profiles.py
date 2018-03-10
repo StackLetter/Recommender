@@ -38,7 +38,7 @@ class QuestionProfile:
         except AttributeError:
             with psql:
                 cur = psql.cursor()
-                cur.execute('SELECT topic_id, weight FROM mls_question_topics WHERE question_id = %s ORDER BY weight DESC', (self.id,))
+                cur.execute('SELECT DISTINCT topic_id, weight FROM mls_question_topics WHERE question_id = %s ORDER BY weight DESC', (self.id,))
                 self.__topics = cur.fetchall()
                 return self.__topics
 

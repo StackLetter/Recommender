@@ -161,7 +161,7 @@ class UserProfile:
         lst, weight = args
         return sorted(lst, key=lambda t: t[1], reverse=True), weight
 
-    def _merge_wlists(self, old, new, decay_factor):
+    def _merge_wlists(self, old, new, decay_factor=1.0):
         sum_w = old[1] + new[1]
         res = Counter({k: v * old[1] * decay_factor for k, v in old[0]})
         for k, v in new[0]:

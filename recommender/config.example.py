@@ -16,6 +16,7 @@ models = {
 }
 
 archive_dir = 'archive'
+log_file = 'logs/app.log'
 
 question_profile = SimpleNamespace()
 question_profile.lda_threshold_percentile = 25

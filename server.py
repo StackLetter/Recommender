@@ -47,51 +47,27 @@ def default_route():
     return json_response({'status': 'ok'})
 
 
-@app.route('/hot-questions/<string:frequency>/<int:user_id>')
-def get_hot_questions(frequency, user_id):
+@app.route('/recommend/<string:section>/')
+def get_recommendations(section):
+    section_mode_map = {
+        'hot-questions':       ('questions', 'interests'),
+        'useful-questions':    ('questions', 'interests'),
+        'awaiting-answer':     ('questions', 'expertise'),
+        'popular-unanswered':  ('questions', 'expertise'),
+        'highly-discussed-qs': ('questions', 'both'),
+        'highly-discussed-as': ('answers',   'both'),
+        'interesting-answers': ('answers',   'both'),
+    }
+    if section not in section_mode_map.keys():
+        return flask.abort(404)
+
     try:
-        duplicates = json.loads(flask.request.args.get('duplicates', '{}'))
-    except ValueError:
+        args = flask.request.args
+        user_id = args['user_id']
+        frequency = args['frequency']
+        duplicates = json.loads(args.get('duplicates', '{}'))
+    except ValueError or KeyError:
         return flask.abort(400)
 
-    return json_response(recommender.recommend('hot-questions', 'interests', frequency, user_id, duplicates))
-
-
-@app.route('/useful-questions/<string:frequency>/<int:user_id>')
-def get_useful_questions(frequency, user_id):
-    try:
-        duplicates = json.loads(flask.request.args.get('duplicates', '{}'))
-    except ValueError:
-        return flask.abort(400)
-
-    return json_response(recommender.recommend('useful-questions', 'interests', frequency, user_id, duplicates))
-
-
-@app.route('/awaiting-answer/<string:frequency>/<int:user_id>')
-def get_awaiting_answer(frequency, user_id):
-    try:
-        duplicates = json.loads(flask.request.args.get('duplicates', '{}'))
-    except ValueError:
-        return flask.abort(400)
-
-    return json_response(recommender.recommend('awaiting-answer', 'expertise', frequency, user_id, duplicates))
-
-
-@app.route('/popular-unanswered/<string:frequency>/<int:user_id>')
-def get_popular_unanswered(frequency, user_id):
-    try:
-        duplicates = json.loads(flask.request.args.get('duplicates', '{}'))
-    except ValueError:
-        return flask.abort(400)
-
-    return json_response(recommender.recommend('popular-unanswered', 'expertise', frequency, user_id, duplicates))
-
-
-@app.route('/highly-discussed-qs/<string:frequency>/<int:user_id>')
-def get_highly_discussed_qs(frequency, user_id):
-    try:
-        duplicates = json.loads(flask.request.args.get('duplicates', '{}'))
-    except ValueError:
-        return flask.abort(400)
-
-    return json_response(recommender.recommend('highly-discussed-qs', 'interests', frequency, user_id, duplicates))
+    rec_mode = section_mode_map[section]
+    return json_response(recommender.recommend(section, rec_mode, frequency, user_id, duplicates))

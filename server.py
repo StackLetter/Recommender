@@ -63,11 +63,16 @@ def get_recommendations(section):
 
     try:
         args = flask.request.args
-        user_id = args['user_id']
+        user_id = int(args['user_id'])
         frequency = args['frequency']
         duplicates = json.loads(args.get('duplicates', '{}'))
     except ValueError or KeyError:
         return flask.abort(400)
 
+    app.logger.info('GET recommendations - user: %s, section: %s, freq: %s', user_id, section, frequency)
+
     rec_mode = section_mode_map[section]
-    return json_response(recommender.recommend(section, rec_mode, frequency, user_id, duplicates))
+    results = recommender.recommend(section, rec_mode, frequency, user_id, duplicates, logger=app.logger)
+
+    app.logger.info('Returned %d results.', len(results))
+    return json_response(results)

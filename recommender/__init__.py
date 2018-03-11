@@ -99,8 +99,7 @@ def recommend(section, rec_mode, freq, uid, dupes, logger):
         return fetch_trivial_recommendations(uid, section, freq, dupes) # TODO use community profile
 
     now = datetime.now()
-    since = now - timedelta(days=24) if freq == 'w' else now - timedelta(days=3)
-    #since = now - timedelta(days=8) if freq == 'w' else now - timedelta(days=2)
+    since = now - timedelta(days=8) if freq == 'w' else now - timedelta(days=2)
 
     rec = PersonalizedRecommender(user, logger)
     matches = rec.recommend(rec_mode, section, since, dupes)

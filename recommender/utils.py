@@ -1,4 +1,5 @@
 from types import SimpleNamespace
+import flask
 
 queries = SimpleNamespace()
 
@@ -58,3 +59,87 @@ WHERE account_id IS NOT NULL AND site_id = %s AND a.frequency = 'd'"""
 queries.weekly_subscribers = """
 SELECT u.id FROM users u LEFT JOIN accounts a ON u.account_id = a.id
 WHERE account_id IS NOT NULL AND site_id = %s AND a.frequency = 'w'"""
+
+
+
+queries.sections = {
+    'hot-questions': """
+        SELECT DISTINCT id FROM (
+            SELECT q.id
+            FROM questions q
+            LEFT JOIN question_tags qt ON qt.question_id = q.id
+            LEFT JOIN mls_question_topics qto ON qto.question_id = q.id
+            WHERE q.site_id = %(site_id)s
+            AND q.score > 3
+            AND q.id NOT IN %(dupes)s
+            AND q.removed IS NULL
+            AND q.creation_date > %(since)s
+            AND (qt.tag_id IN %(tags)s OR qto.topic_id IN %(topics)s)
+            ORDER BY q.score DESC, q.creation_date DESC) x
+        LIMIT 500""",
+
+    'useful-questions': """
+        SELECT DISTINCT id FROM (
+            SELECT q.id
+            FROM questions q
+            LEFT JOIN answers a ON q.id = a.question_id
+            LEFT JOIN question_tags qt ON qt.question_id = q.id
+            LEFT JOIN mls_question_topics qto ON qto.question_id = q.id
+            WHERE q.site_id = %(site_id)s
+            AND q.score > 3
+            AND a.question_id IS NOT NULL
+            AND q.id NOT IN %(dupes)s
+            AND q.removed IS NULL
+            AND q.creation_date > %(since)s
+            AND (qt.tag_id IN %(tags)s OR qto.topic_id IN %(topics)s)
+            ORDER BY q.score DESC, q.creation_date DESC) x
+        LIMIT 500""",
+
+    'awaiting-answer': """
+        SELECT DISTINCT id FROM (
+            SELECT q.id
+            FROM questions q
+            LEFT JOIN answers a ON q.id = a.question_id
+            LEFT JOIN question_tags qt ON qt.question_id = q.id
+            LEFT JOIN mls_question_topics qto ON qto.question_id = q.id
+            WHERE q.site_id = %(site_id)s
+            AND a.question_id IS NULL
+            AND q.id NOT IN %(dupes)s
+            AND q.removed IS NULL
+            AND q.creation_date > %(since)s
+            AND (qt.tag_id IN %(tags)s OR qto.topic_id IN %(topics)s)
+            ORDER BY q.score ASC, q.creation_date DESC) x
+        LIMIT 500""",
+
+    'popular-unanswered': """
+        SELECT DISTINCT id FROM (
+            SELECT q.id
+            FROM questions q
+            LEFT JOIN answers a ON q.id = a.question_id
+            LEFT JOIN question_tags qt ON qt.question_id = q.id
+            LEFT JOIN mls_question_topics qto ON qto.question_id = q.id
+            WHERE q.site_id = %(site_id)s
+            AND q.score > 1
+            AND a.question_id IS NULL
+            AND q.id NOT IN %(dupes)s
+            AND q.removed IS NULL
+            AND q.creation_date > %(since)s
+            AND (qt.tag_id IN %(tags)s OR qto.topic_id IN %(topics)s)
+            ORDER BY q.score DESC, q.creation_date DESC) x
+        LIMIT 500""",
+
+    'highly-discussed-qs': """
+        SELECT DISTINCT id FROM (
+            SELECT q.id
+            FROM questions q
+            LEFT JOIN question_tags qt ON qt.question_id = q.id
+            LEFT JOIN mls_question_topics qto ON qto.question_id = q.id
+            WHERE q.site_id = %(site_id)s
+            AND q.id NOT IN %(dupes)s
+            AND q.comment_count > 3
+            AND q.removed IS NULL
+            AND q.creation_date > %(since)s
+            AND (qt.tag_id IN %(tags)s OR qto.topic_id IN %(topics)s)
+            ORDER BY q.comment_count DESC, q.creation_date DESC) x
+        LIMIT 500""",
+}

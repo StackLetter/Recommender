@@ -31,15 +31,15 @@ def error_http(error):
         if error.description:
             obj['reason'] = error.description
             app.logger.error('Reason: %s', error.description)
-        response = flask.make_response(flask.jsonify(obj), error.code)
+        response = json_response(obj, error.code)
         return response
     else:
         app.logger.error('Exception: %s', str(error))
-        return flask.make_response(flask.jsonify({
+        return json_response({
             'status': 'error',
             'code': 500,
             'message': 'Internal Server Error',
-        }), 500)
+        }, 500)
 
 
 @app.route('/')

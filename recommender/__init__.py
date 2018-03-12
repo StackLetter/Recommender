@@ -36,11 +36,12 @@ class PersonalizedRecommender:
         topics = self.user.get_topics(3, get_int, get_exp)
 
         # Construct query based on section
+        duplicates = dupes.get('question' if content_type == 'questions' else 'answer', [0])
         query = utils.queries.sections[section]
         query_params = {
             'site_id': config.site_id,
             'since': since,
-            'dupes': tuple(dupes.get('question', [0])),
+            'dupes': tuple(duplicates if len(duplicates) > 0 else [0]),
             'tags': tuple(tags),
             'topics': tuple(topics),
         }

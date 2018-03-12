@@ -81,7 +81,7 @@ queries.sections = {
         LIMIT 500""",
 
     'useful-questions': """
-        SELECT DISTINCT id FROM (
+        SELECT DISTINCT * FROM (
             SELECT q.id, q.score, q.creation_date
             FROM questions q
             LEFT JOIN answers a ON q.id = a.question_id

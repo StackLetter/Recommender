@@ -73,7 +73,10 @@ class UserProfile:
     def load(cls, id):
         model_file = Path('.') / config.models['dir'] / config.models['user-dir'] / '{}.pkl'.format(id)
         if model_file.exists():
-            return joblib.load(model_file)
+            try:
+                return joblib.load(model_file)
+            except:
+                return cls(id)
         return cls(id)
 
     def _get_topics(self):

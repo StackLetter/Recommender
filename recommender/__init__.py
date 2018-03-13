@@ -11,6 +11,7 @@ psql = psycopg2.connect(
     database=config.DB.name,
     user=config.DB.user,
     password=config.DB.password,
+    connect_timeout=120
 )
 
 from recommender import models, utils, profiles

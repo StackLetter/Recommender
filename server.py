@@ -1,4 +1,7 @@
+import os
 import flask, json
+import rollbar
+import rollbar.contrib.flask
 import recommender
 
 def json_response(data, http_code=200):
@@ -6,6 +9,13 @@ def json_response(data, http_code=200):
 
 app = flask.Flask(__name__)
 
+@app.before_first_request
+def init_rollbar():
+    rollbar.init(recommender.config.rollbar_token, recommender.config.rollbar_env,
+                 root=os.path.dirname(os.path.realpath(__file__)),
+                 allow_logging_basic_config=False)
+
+    flask.got_request_exception.connect(rollbar.contrib.flask.report_exception, app)
 
 @app.after_request
 def set_response_headers(response):

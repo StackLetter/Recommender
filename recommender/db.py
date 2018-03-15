@@ -21,7 +21,6 @@ def connection():
         db = getattr(g, '_database', None)
         if db is None:
             db = g._database = connect()
-        print(type(db))
         return db
     else:
         if _database is None:

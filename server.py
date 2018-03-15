@@ -106,4 +106,5 @@ def test_db():
 
 @app.teardown_appcontext
 def close_db(ex):
+    app.logger.debug('Closing DB connection (App context teardown)')
     recommender.db.close()

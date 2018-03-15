@@ -8,7 +8,7 @@ from sklearn.externals import joblib
 from sklearn.feature_extraction.text import TfidfTransformer
 import scipy.sparse as sparse
 from pathlib import Path
-from datetime import datetime
+from datetime import datetime, timedelta
 from cachetools import LFUCache, cached
 
 
@@ -329,3 +329,34 @@ class UserProfile:
         product = u_vector * q_matrix.T
         sorted_list = sorted(zip(q_index, product.A[0]), key=lambda t: t[1], reverse=True)
         return sorted_list
+
+
+
+class CommunityProfile(UserProfile):
+
+    def __init__(self):
+        self.id = 'community'
+        self.iterations = 0
+        self.since = None
+        self.interests = SimpleNamespace(tags=None, topics=None, terms=None, tfidf=None, total=0)
+        self.expertise = SimpleNamespace(tags=None, topics=None, terms=None, tfidf=None, total=0)
+
+    def _get_qlists(self, since=None):
+        if since is None:
+            since = datetime.now() - timedelta(days=10)
+        asked_qs = self._get_question_profiles("""
+            SELECT id FROM questions
+            WHERE removed IS NULL {since}""", since)
+
+        answer_query_base = 'SELECT question_id FROM answers WHERE removed IS NULL AND owner_id = %(user_id)s {since}'
+        positive_as = self._get_question_profiles(answer_query_base + ' AND score >= 0', since)
+        negative_as = self._get_question_profiles(answer_query_base + ' AND score < 0', since)
+        accepted_as = self._get_question_profiles(answer_query_base + ' AND is_accepted', since)
+
+        interests = [(asked_qs, 1.00)]
+        expertise = [
+            (positive_as,   1.00),
+            (negative_as,  -1.00),
+            (accepted_as,   1.75),
+        ]
+        return interests, expertise

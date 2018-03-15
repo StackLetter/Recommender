@@ -1,11 +1,11 @@
 #!env/bin/python
 from pathlib import Path
-from recommender import train, psql, config, utils
+from recommender import train, db, config, utils
 from datetime import datetime
 
 def create_question_profiles(query, args):
-    with psql:
-        cur = psql.cursor()
+    with db.connection() as conn:
+        cur = conn.cursor()
         cur.execute(query, args)
 
         for question in cur:
@@ -28,8 +28,8 @@ create_question_profiles(utils.queries.all_user_activity, (config.site_id,))
 
 # 3) Retrain user profiles for all daily newsletter subscribers
 from recommender.profiles import UserProfile
-with psql:
-    cur = psql.cursor()
+with db.connection() as conn:
+    cur = conn.cursor()
     cur.execute(utils.queries.daily_subscribers, (config.site_id,))
     for uid in cur:
         user = UserProfile.load(uid[0])
@@ -38,3 +38,6 @@ with psql:
         archive_user_profile(user)
 
 # 4) Retrain community user profile TODO
+
+
+db.close()

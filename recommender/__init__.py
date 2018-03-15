@@ -1,4 +1,3 @@
-import psycopg2
 import requests
 import json
 from datetime import datetime, timedelta
@@ -6,15 +5,7 @@ from pathlib import Path
 from recommender import config
 from sklearn.externals import joblib
 
-psql = psycopg2.connect(
-    host=config.DB.host,
-    database=config.DB.name,
-    user=config.DB.user,
-    password=config.DB.password,
-    connect_timeout=120
-)
-
-from recommender import models, utils, profiles
+from recommender import models, utils, profiles, db
 
 # User profile threshold; If smaller, use community profile
 profile_size_threshold = 5
@@ -48,8 +39,8 @@ class PersonalizedRecommender:
         }
 
         # Run query
-        with psql:
-            cur = psql.cursor()
+        with db.connection() as conn:
+            cur = conn.cursor()
             cur.execute(query, query_params)
             results = [res[0] for res in cur]
 
@@ -60,8 +51,8 @@ class PersonalizedRecommender:
         # If answers, we have some more work
         elif content_type == 'answers':
             # Construct question-answer index
-            with psql:
-                cur = psql.cursor()
+            with db.connection() as conn:
+                cur = conn.cursor()
                 cur.execute(utils.queries.question_answer_index, {'answers': tuple(results)})
                 qa_index = {qid: aid for qid, aid in cur}
 

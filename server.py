@@ -86,3 +86,24 @@ def get_recommendations(section):
 
     app.logger.info('Returned %d results.', len(results))
     return json_response(results)
+
+
+
+@app.route('/test-db')
+def test_db():
+    with recommender.db.connection() as conn:
+        cur = conn.cursor()
+        cur.execute('SELECT id, display_name FROM users WHERE account_id IS NOT NULL')
+        data = {id: name for id, name in cur}
+
+    with recommender.db.connection() as conn:
+        cur = conn.cursor()
+        cur.execute('SELECT id FROM users WHERE account_id IS NOT NULL')
+        data2 = [u[0] for u in cur]
+
+    return json_response([data, data2])
+
+
+@app.teardown_appcontext
+def close_db(ex):
+    recommender.db.close()

@@ -10,10 +10,10 @@ except ValueError:
     print("Invalid day interval specified; must be a number.")
     sys.exit(1)
 
-from recommender import train, psql, config, utils
+from recommender import train, db, config, utils
 
-with psql:
-    cur = psql.cursor()
+with db.connection() as conn:
+    cur = conn.cursor()
     cur.execute(utils.queries.all_questions_since, (config.site_id, days))
 
     i = 0
@@ -24,3 +24,6 @@ with psql:
         if i % 100 == 0:
             print(i)
 
+
+
+db.close()

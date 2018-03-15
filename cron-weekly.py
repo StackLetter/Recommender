@@ -1,6 +1,6 @@
 #!env/bin/python
 from pathlib import Path
-from recommender import train, psql, config, utils
+from recommender import train, db, config, utils
 from datetime import datetime
 
 def archive_user_profile(user):
@@ -12,11 +12,14 @@ def archive_user_profile(user):
 
 # Retrain user profiles for all weekly newsletter subscribers
 from recommender.profiles import UserProfile
-with psql:
-    cur = psql.cursor()
+with db.connection() as conn:
+    cur = conn.cursor()
     cur.execute(utils.queries.weekly_subscribers, (config.site_id,))
     for uid in cur:
         user = UserProfile.load(uid[0])
         user.retrain()
         user.save()
         archive_user_profile(user)
+
+
+db.close()

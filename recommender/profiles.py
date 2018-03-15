@@ -2,7 +2,7 @@ import itertools
 import operator
 from collections import Counter
 from types import SimpleNamespace
-from recommender import config, models, psql
+from recommender import config, models, db
 import numpy
 from sklearn.externals import joblib
 from sklearn.feature_extraction.text import TfidfTransformer
@@ -17,8 +17,8 @@ class QuestionProfile:
 
     def __init__(self, id):
         self.id = id
-        with psql:
-            cur = psql.cursor()
+        with db.connection() as conn:
+            cur = conn.cursor()
             cur.execute("SELECT id, title, body, creation_date FROM questions WHERE id = %s", (self.id,))
             _, self.title, self.body, self.creation_date = cur.fetchone()
 
@@ -26,8 +26,8 @@ class QuestionProfile:
         try:
             return self.__tags
         except AttributeError:
-            with psql:
-                cur = psql.cursor()
+            with db.connection() as conn:
+                cur = conn.cursor()
                 cur.execute('SELECT tag_id FROM question_tags WHERE question_id = %s', (self.id,))
                 self.__tags = [tag[0] for tag in cur]
                 return self.__tags
@@ -36,8 +36,8 @@ class QuestionProfile:
         try:
             return self.__topics
         except AttributeError:
-            with psql:
-                cur = psql.cursor()
+            with db.connection() as conn:
+                cur = conn.cursor()
                 cur.execute('SELECT DISTINCT topic_id, weight FROM mls_question_topics WHERE question_id = %s ORDER BY weight DESC', (self.id,))
                 self.__topics = cur.fetchall()
                 return self.__topics
@@ -83,8 +83,8 @@ class UserProfile:
         try:
             return self.__topics
         except AttributeError:
-            with psql:
-                cur = psql.cursor()
+            with db.connection() as conn:
+                cur = conn.cursor()
                 cur.execute('SELECT DISTINCT topic_id FROM mls_question_topics WHERE site_id = %s ORDER BY topic_id',
                             (config.site_id,))
                 self.__topics = [topic[0] for topic in cur]
@@ -95,8 +95,8 @@ class UserProfile:
         since_query = 'AND {}created_at > %(since)s'.format(since_table) if since else ''
         if since:
             params['since'] = since
-        with psql:
-            cur = psql.cursor()
+        with db.connection() as conn:
+            cur = conn.cursor()
             cur.execute(question_query.format(since=since_query), params)
             return [QuestionProfile(question[0]) for question in cur]
 

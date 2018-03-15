@@ -3,7 +3,7 @@ from sklearn.decomposition import LatentDirichletAllocation
 import numpy
 from psycopg2.extras import execute_values
 
-from recommender import models, config, psql
+from recommender import models, config, db
 
 model_lda = models.load(models.MODEL_LDA) # type: LatentDirichletAllocation
 model_vocab = models.load(models.MODEL_VOCAB) # type: CountVectorizer
@@ -26,7 +26,7 @@ def get_question_topics(question):
 
 def persist_question_topics(question, topics):
     qid = question[0]
-    with psql:
-        execute_values(psql.cursor(), 'INSERT INTO mls_question_topics (question_id, topic_id, site_id, weight, created_at, updated_at) VALUES %s',
+    with db.connection() as conn:
+        execute_values(conn.cursor(), 'INSERT INTO mls_question_topics (question_id, topic_id, site_id, weight, created_at, updated_at) VALUES %s',
                        ((qid, topic, config.site_id, weight) for weight, topic in topics),
                        '(%s, %s, %s, %s, NOW(), NOW())')

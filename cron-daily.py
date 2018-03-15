@@ -1,6 +1,6 @@
 #!env/bin/python
 from pathlib import Path
-from recommender import train, db, config, utils
+from recommender import train, db, config, queries
 from datetime import datetime
 
 def create_question_profiles(query, args):
@@ -18,26 +18,32 @@ def archive_user_profile(user):
         archive_dir.mkdir(parents=True)
     return user.save(archive_dir / '{}.pkl'.format(user.id))
 
+def run_daily_cron():
+    # 1) Create profiles for Qs from last two days
+    create_question_profiles(queries.all_questions_since, (config.site_id, 2))
+
+    # 2) Create profiles for Qs in all user activities
+    create_question_profiles(queries.all_user_activity, (config.site_id,))
+
+    # 3) Retrain user profiles for all daily newsletter subscribers
+    from recommender.profiles import UserProfile, CommunityProfile
+    with db.connection() as conn:
+        cur = conn.cursor()
+        cur.execute(queries.daily_subscribers, (config.site_id,))
+        for uid in cur:
+            user = UserProfile.load(uid[0])
+            user.retrain()
+            user.save()
+            archive_user_profile(user)
+
+    # 4) Retrain community user profile
+    community = CommunityProfile.load()
+    community.retrain()
+    community.save()
+    archive_user_profile(community)
+
+    db.close()
 
 
-# 1) Create profiles for Qs from last two days
-create_question_profiles(utils.queries.all_questions_since, (config.site_id, 2))
-
-# 2) Create profiles for Qs in all user activities
-create_question_profiles(utils.queries.all_user_activity, (config.site_id,))
-
-# 3) Retrain user profiles for all daily newsletter subscribers
-from recommender.profiles import UserProfile
-with db.connection() as conn:
-    cur = conn.cursor()
-    cur.execute(utils.queries.daily_subscribers, (config.site_id,))
-    for uid in cur:
-        user = UserProfile.load(uid[0])
-        user.retrain()
-        user.save()
-        archive_user_profile(user)
-
-# 4) Retrain community user profile TODO
-
-
-db.close()
+if __name__ == '__main__':
+    run_daily_cron()

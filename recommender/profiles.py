@@ -344,9 +344,7 @@ class CommunityProfile(UserProfile):
     def _get_qlists(self, since=None):
         if since is None:
             since = datetime.now() - timedelta(days=10)
-        asked_qs = self._get_question_profiles("""
-            SELECT id FROM questions
-            WHERE removed IS NULL {since}""", since)
+        asked_qs = self._get_question_profiles('SELECT id FROM questions WHERE removed IS NULL {since}', since)
 
         answer_query_base = 'SELECT question_id FROM answers WHERE removed IS NULL {since}'
         positive_as = self._get_question_profiles(answer_query_base + ' AND score >= 0', since)

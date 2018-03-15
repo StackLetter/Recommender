@@ -1,27 +1,25 @@
 #!env/bin/python
-from pathlib import Path
-from recommender import db, config, queries
-from datetime import datetime
+from recommender import db, config, queries, utils
 
-def archive_user_profile(user):
-    archive_dir = Path('.') / config.archive_dir / '{:%Y-%m-%d}'.format(datetime.now())
-    if not archive_dir.exists():
-        archive_dir.mkdir(parents=True)
-    return user.save(archive_dir / 'w_{}.pkl'.format(user.id))
-
-def run_weekly_cron():
-    # Retrain user profiles for all weekly newsletter subscribers
+def run_weekly_cron(logger):
+    logger.info('Retraining weekly subscriber user profiles')
     from recommender.profiles import UserProfile
     with db.connection() as conn:
         cur = conn.cursor()
         cur.execute(queries.weekly_subscribers, (config.site_id,))
+        i = 0
         for uid in cur:
             user = UserProfile.load(uid[0])
             user.retrain()
             user.save()
-            archive_user_profile(user)
+            utils.archive_user_profile(user)
+            i+=1
+    logger.debug('Retrained %d user profiles', i)
     db.close()
 
 
 if __name__ == '__main__':
-    run_weekly_cron()
+    logger = utils.setup_logging(config.cron_log_file_weekly)
+    logger.info('Running weekly cron job')
+    run_weekly_cron(logger)
+    logger.info('Weekly cronjob finished')

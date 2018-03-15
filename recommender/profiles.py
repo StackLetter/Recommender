@@ -348,7 +348,7 @@ class CommunityProfile(UserProfile):
             SELECT id FROM questions
             WHERE removed IS NULL {since}""", since)
 
-        answer_query_base = 'SELECT question_id FROM answers WHERE removed IS NULL AND owner_id = %(user_id)s {since}'
+        answer_query_base = 'SELECT question_id FROM answers WHERE removed IS NULL {since}'
         positive_as = self._get_question_profiles(answer_query_base + ' AND score >= 0', since)
         negative_as = self._get_question_profiles(answer_query_base + ' AND score < 0', since)
         accepted_as = self._get_question_profiles(answer_query_base + ' AND is_accepted', since)

@@ -88,8 +88,8 @@ def recommend(section, rec_mode, freq, uid, dupes, logger):
     logger.debug('Profile size: %.2f (mode: %s)', profile_size, profile_mode)
 
     if profile_size < profile_size_threshold:
-        logger.debug('Insufficient profile size. Offload to trivial recommender')
-        return fetch_trivial_recommendations(uid, section, freq, dupes) # TODO use community profile
+        logger.debug('Insufficient profile size. Using combined community profile')
+        user = profiles.CommunityProfile.load()
 
     now = datetime.now()
     since = now - timedelta(days=8) if freq == 'w' else now - timedelta(days=2)

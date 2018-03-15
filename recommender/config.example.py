@@ -17,6 +17,8 @@ models = {
 
 archive_dir = 'archive'
 log_file = 'logs/app.log'
+cron_log_file_daily = 'logs/cron-daily.log'
+cron_log_file_weekly = 'logs/cron-weekly.log'
 
 rollbar_token = ''
 rollbar_env = 'recommender.production'

@@ -2,7 +2,7 @@ import itertools
 import operator
 from collections import Counter
 from types import SimpleNamespace
-from recommender import config, models, db
+from recommender import config, models, db, queries
 import numpy
 from sklearn.externals import joblib
 from sklearn.feature_extraction.text import TfidfTransformer
@@ -19,7 +19,7 @@ class QuestionProfile:
         self.id = id
         with db.connection() as conn:
             cur = conn.cursor()
-            cur.execute("SELECT id, title, body, creation_date FROM questions WHERE id = %s", (self.id,))
+            cur.execute(queries.user_profile['question_get_content'], (self.id,))
             _, self.title, self.body, self.creation_date = cur.fetchone()
 
     def tags(self):
@@ -28,7 +28,7 @@ class QuestionProfile:
         except AttributeError:
             with db.connection() as conn:
                 cur = conn.cursor()
-                cur.execute('SELECT tag_id FROM question_tags WHERE question_id = %s', (self.id,))
+                cur.execute(queries.user_profile['question_get_tags'], (self.id,))
                 self.__tags = [tag[0] for tag in cur]
                 return self.__tags
 
@@ -38,7 +38,7 @@ class QuestionProfile:
         except AttributeError:
             with db.connection() as conn:
                 cur = conn.cursor()
-                cur.execute('SELECT DISTINCT topic_id, weight FROM mls_question_topics WHERE question_id = %s ORDER BY weight DESC', (self.id,))
+                cur.execute(queries.user_profile['question_get_topics'], (self.id,))
                 self.__topics = cur.fetchall()
                 return self.__topics
 
@@ -85,8 +85,7 @@ class UserProfile:
         except AttributeError:
             with db.connection() as conn:
                 cur = conn.cursor()
-                cur.execute('SELECT DISTINCT topic_id FROM mls_question_topics WHERE site_id = %s ORDER BY topic_id',
-                            (config.site_id,))
+                cur.execute(queries.user_profile['get_topics'], (config.site_id,))
                 self.__topics = [topic[0] for topic in cur]
             return self.__topics
 
@@ -101,41 +100,16 @@ class UserProfile:
             return [QuestionProfile(question[0]) for question in cur]
 
     def _get_qlists(self, since=None):
-        asked_qs = self._get_question_profiles("""
-            SELECT id FROM questions
-            WHERE removed IS NULL AND owner_id = %(user_id)s {since}""", since)
-        commented_qs = self._get_question_profiles("""
-            SELECT question_id AS id FROM comments
-            WHERE removed IS NULL AND question_id IS NOT NULL
-            AND owner_id = %(user_id)s {since} UNION
-            SELECT question_id AS id FROM answers
-            WHERE removed IS NULL AND id IN (
-                SELECT answer_id AS id FROM comments
-                WHERE removed IS NULL AND question_id IS NULL
-                AND owner_id = %(user_id)s {since})""", since)
-        favorited_qs = self._get_question_profiles("""SELECT q.id FROM user_favorites f
-            LEFT JOIN questions q ON q.external_id = f.external_id
-            WHERE q.removed IS NULL AND f.user_id = %(user_id)s {since} AND q.id IS NOT NULL""", since, since_table='f.')
+        asked_qs = self._get_question_profiles(queries.user_profile['asked_qs'], since)
+        commented_qs = self._get_question_profiles(queries.user_profile['commented_qs'], since)
+        favorited_qs = self._get_question_profiles(queries.user_profile['favorited_qs'], since, since_table='f.')
 
-        answer_query_base = 'SELECT question_id FROM answers WHERE removed IS NULL AND owner_id = %(user_id)s {since}'
+        answer_query_base = queries.user_profile['answer_query_base']
         positive_as = self._get_question_profiles(answer_query_base + ' AND score >= 0', since)
         negative_as = self._get_question_profiles(answer_query_base + ' AND score < 0', since)
         accepted_as = self._get_question_profiles(answer_query_base + ' AND is_accepted', since)
 
-        feedback_query_base = """SELECT e.content_detail::int FROM evaluation_newsletters e
-            LEFT JOIN newsletters n ON n.id = e.newsletter_id
-            WHERE n.user_id = %(user_id)s
-            AND e.content_type = 'question'
-            AND e.user_response_type = '{fb}'
-            {{since}}
-            UNION
-            SELECT a.question_id FROM evaluation_newsletters e
-            LEFT JOIN newsletters n ON n.id = e.newsletter_id
-            LEFT JOIN answers a ON a.id = e.content_detail::int
-            WHERE n.user_id = %(user_id)s
-            AND e.content_type = 'answer'
-            AND e.user_response_type = '{fb}'
-            {{since}}"""
+        feedback_query_base = queries.user_profile['feedback_query_base']
         implicit_fb = self._get_question_profiles(feedback_query_base.format(fb='click'), since, since_table='e.')
         explicit_fb = self._get_question_profiles(feedback_query_base.format(fb='feedback'), since, since_table='e.')
 
@@ -344,9 +318,9 @@ class CommunityProfile(UserProfile):
     def _get_qlists(self, since=None):
         if since is None:
             since = datetime.now() - timedelta(days=10)
-        asked_qs = self._get_question_profiles('SELECT id FROM questions WHERE removed IS NULL {since}', since)
+        asked_qs = self._get_question_profiles(queries.user_profile['community_asked_qs'], since)
 
-        answer_query_base = 'SELECT question_id FROM answers WHERE removed IS NULL {since}'
+        answer_query_base = queries.user_profile['community_answer_query_base']
         positive_as = self._get_question_profiles(answer_query_base + ' AND score >= 0', since)
         negative_as = self._get_question_profiles(answer_query_base + ' AND score < 0', since)
         accepted_as = self._get_question_profiles(answer_query_base + ' AND is_accepted', since)

@@ -59,6 +59,57 @@ WHERE account_id IS NOT NULL AND site_id = %s AND a.frequency = 'w'"""
 question_answer_index = 'SELECT question_id, id FROM answers WHERE id IN %(answers)s'
 
 
+user_profile = {
+    'question_get_content': 'SELECT id, title, body, creation_date FROM questions WHERE id = %s',
+    'question_get_tags': 'SELECT tag_id FROM question_tags WHERE question_id = %s',
+    'question_get_topics': """
+        SELECT DISTINCT topic_id, weight FROM mls_question_topics
+        WHERE question_id = %s ORDER BY weight DESC""",
+
+    'get_topics': 'SELECT DISTINCT topic_id FROM mls_question_topics WHERE site_id = %s ORDER BY topic_id',
+
+    'asked_qs': """
+        SELECT id FROM questions
+        WHERE removed IS NULL AND owner_id = %(user_id)s {since}""",
+
+    'commented_qs': """
+        SELECT question_id AS id FROM comments
+        WHERE removed IS NULL AND question_id IS NOT NULL
+        AND owner_id = %(user_id)s {since} UNION
+        SELECT question_id AS id FROM answers
+        WHERE removed IS NULL AND id IN (
+            SELECT answer_id AS id FROM comments
+            WHERE removed IS NULL AND question_id IS NULL
+            AND owner_id = %(user_id)s {since})""",
+
+    'favorited_qs': """
+        SELECT q.id FROM user_favorites f
+        LEFT JOIN questions q ON q.external_id = f.external_id
+        WHERE q.removed IS NULL AND f.user_id = %(user_id)s {since} AND q.id IS NOT NULL""",
+
+    'answer_query_base': 'SELECT question_id FROM answers WHERE removed IS NULL AND owner_id = %(user_id)s {since}',
+
+    'feedback_query_base': """
+        SELECT e.content_detail::int FROM evaluation_newsletters e
+        LEFT JOIN newsletters n ON n.id = e.newsletter_id
+        WHERE n.user_id = %(user_id)s
+        AND e.content_type = 'question'
+        AND e.user_response_type = '{fb}'
+        {{since}}
+        UNION
+        SELECT a.question_id FROM evaluation_newsletters e
+        LEFT JOIN newsletters n ON n.id = e.newsletter_id
+        LEFT JOIN answers a ON a.id = e.content_detail::int
+        WHERE n.user_id = %(user_id)s
+        AND e.content_type = 'answer'
+        AND e.user_response_type = '{fb}'
+        {{since}}""",
+
+    'community_asked_qs': 'SELECT id FROM questions WHERE removed IS NULL {since}',
+    'community_answer_query_base': 'SELECT question_id FROM answers WHERE removed IS NULL {since}',
+}
+
+
 sections = {
     'hot-questions': """
         SELECT DISTINCT * FROM (

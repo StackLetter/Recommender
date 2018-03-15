@@ -10,11 +10,11 @@ except ValueError:
     print("Invalid day interval specified; must be a number.")
     sys.exit(1)
 
-from recommender import train, db, config, utils
+from recommender import train, db, config, queries
 
 with db.connection() as conn:
     cur = conn.cursor()
-    cur.execute(utils.queries.all_questions_since, (config.site_id, days))
+    cur.execute(queries.all_questions_since, (config.site_id, days))
 
     i = 0
     for question in cur:

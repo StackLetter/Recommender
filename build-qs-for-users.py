@@ -1,10 +1,10 @@
 #!env/bin/python
 
-from recommender import train, db, config, utils
+from recommender import train, db, config, queries
 
 with db.connection() as conn:
     cur = conn.cursor()
-    cur.execute(utils.queries.all_user_activity, (config.site_id,))
+    cur.execute(queries.all_user_activity, (config.site_id,))
 
     for question in cur:
         topics = train.get_question_topics(question)

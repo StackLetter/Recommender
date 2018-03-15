@@ -1,9 +1,5 @@
-from types import SimpleNamespace
-import flask
 
-queries = SimpleNamespace()
-
-queries.all_user_activity = """
+all_user_activity = """
 WITH question_ids AS (
     SELECT id FROM (
         WITH
@@ -46,24 +42,24 @@ AND id NOT IN (SELECT DISTINCT question_id FROM mls_question_topics)
 AND removed IS NULL;
 """
 
-queries.all_questions_since = """
+all_questions_since = """
 SELECT id, title, body FROM questions
 WHERE site_id = %s AND removed IS NULL
 AND created_at >= now() - interval '%s days'
 AND id NOT IN (SELECT DISTINCT question_id FROM mls_question_topics)"""
 
-queries.daily_subscribers = """
+daily_subscribers = """
 SELECT u.id FROM users u LEFT JOIN accounts a ON u.account_id = a.id
 WHERE account_id IS NOT NULL AND site_id = %s AND a.frequency = 'd'"""
 
-queries.weekly_subscribers = """
+weekly_subscribers = """
 SELECT u.id FROM users u LEFT JOIN accounts a ON u.account_id = a.id
 WHERE account_id IS NOT NULL AND site_id = %s AND a.frequency = 'w'"""
 
-queries.question_answer_index = 'SELECT question_id, id FROM answers WHERE id IN %(answers)s'
+question_answer_index = 'SELECT question_id, id FROM answers WHERE id IN %(answers)s'
 
 
-queries.sections = {
+sections = {
     'hot-questions': """
         SELECT DISTINCT * FROM (
             SELECT q.id, q.score, q.creation_date

@@ -5,7 +5,7 @@ from pathlib import Path
 from recommender import config
 from sklearn.externals import joblib
 
-from recommender import models, utils, profiles, db
+from recommender import models, queries, profiles, db
 
 # User profile threshold; If smaller, use community profile
 profile_size_threshold = 5
@@ -29,7 +29,7 @@ class PersonalizedRecommender:
 
         # Construct query based on section
         duplicates = dupes.get('question' if content_type == 'questions' else 'answer', [0])
-        query = utils.queries.sections[section]
+        query = queries.sections[section]
         query_params = {
             'site_id': config.site_id,
             'since': since,
@@ -53,7 +53,7 @@ class PersonalizedRecommender:
             # Construct question-answer index
             with db.connection() as conn:
                 cur = conn.cursor()
-                cur.execute(utils.queries.question_answer_index, {'answers': tuple(results)})
+                cur.execute(queries.question_answer_index, {'answers': tuple(results)})
                 qa_index = {qid: aid for qid, aid in cur}
 
             # Match questions to user

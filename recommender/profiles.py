@@ -358,3 +358,7 @@ class CommunityProfile(UserProfile):
             (accepted_as,   1.75),
         ]
         return interests, expertise
+
+    @classmethod
+    def load(cls):
+        return UserProfile.load('community')

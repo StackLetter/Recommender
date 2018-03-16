@@ -192,6 +192,7 @@ sections = {
             LEFT JOIN question_tags qt ON qt.question_id = q.id
             LEFT JOIN mls_question_topics qto ON qto.question_id = q.id
             WHERE q.site_id = %(site_id)s
+            AND q.score >= 0
             AND q.id NOT IN %(dupes)s
             AND q.comment_count > 3
             AND q.removed IS NULL
@@ -209,6 +210,7 @@ sections = {
             LEFT JOIN question_tags qt ON qt.question_id = q.id
             LEFT JOIN mls_question_topics qto ON qto.question_id = q.id
             WHERE a.site_id = %(site_id)s
+            AND a.score >= 0
             AND a.id NOT IN %(dupes)s
             AND a.comment_count > 3
             AND a.removed IS NULL

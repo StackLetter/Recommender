@@ -119,6 +119,7 @@ sections = {
             LEFT JOIN mls_question_topics qto ON qto.question_id = q.id
             WHERE q.site_id = %(site_id)s
             AND q.score > 3
+            AND q.closed_date IS NULL
             AND q.id NOT IN %(dupes)s
             AND q.removed IS NULL
             AND q.creation_date > %(since)s
@@ -136,6 +137,7 @@ sections = {
             LEFT JOIN mls_question_topics qto ON qto.question_id = q.id
             WHERE q.site_id = %(site_id)s
             AND q.score > 3
+            AND q.closed_date IS NULL
             AND a.question_id IS NOT NULL
             AND q.id NOT IN %(dupes)s
             AND q.removed IS NULL
@@ -153,6 +155,8 @@ sections = {
             LEFT JOIN question_tags qt ON qt.question_id = q.id
             LEFT JOIN mls_question_topics qto ON qto.question_id = q.id
             WHERE q.site_id = %(site_id)s
+            AND q.score >= 0
+            AND q.closed_date IS NULL
             AND a.question_id IS NULL
             AND q.id NOT IN %(dupes)s
             AND q.removed IS NULL
@@ -171,6 +175,7 @@ sections = {
             LEFT JOIN mls_question_topics qto ON qto.question_id = q.id
             WHERE q.site_id = %(site_id)s
             AND q.score > 1
+            AND q.closed_date IS NULL
             AND a.question_id IS NULL
             AND q.id NOT IN %(dupes)s
             AND q.removed IS NULL

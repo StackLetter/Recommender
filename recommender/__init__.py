@@ -215,7 +215,7 @@ def recommend(recommender_type, section, rec_mode, freq, uid, dupes, logger):
     now = datetime.now()
 
     if recommender_type == 'diverse':
-        since = now - timedelta(days=13) if freq == 'w' else now - timedelta(days=3)
+        since = now - timedelta(days=8) if freq == 'w' else now - timedelta(days=2)
         rec = DiverseRecommender(user, logger)
         matches, archive = rec.recommend(rec_mode, section, since, dupes)
         archive_matches(uid, archive, section, 'div_' + freq)

@@ -11,6 +11,9 @@ app = flask.Flask(__name__)
 
 @app.before_first_request
 def init_rollbar():
+    if app.debug:
+        return
+
     rollbar.init(recommender.config.rollbar_token, recommender.config.rollbar_env,
                  root=os.path.dirname(os.path.realpath(__file__)),
                  allow_logging_basic_config=False)
@@ -81,8 +84,42 @@ def get_recommendations(section):
 
     app.logger.info('GET recommendations - user: %s, section: %s, freq: %s', user_id, section, frequency)
 
+    rec_type = 'personalized'
     rec_mode = section_mode_map[section]
-    results = recommender.recommend(section, rec_mode, frequency, user_id, duplicates, logger=app.logger)
+    results = recommender.recommend(rec_type, section, rec_mode, frequency, user_id, duplicates, logger=app.logger)
+
+    app.logger.info('Returned %d results.', len(results))
+    return json_response(results)
+
+
+@app.route('/recommend-diverse/<string:section>/')
+def get_diverse_recommendations(section):
+    section_mode_map = {
+        'hot-questions':       ('questions', 'interests'),
+        'useful-questions':    ('questions', 'interests'),
+        'awaiting-answer':     ('questions', 'expertise'),
+        'popular-unanswered':  ('questions', 'expertise'),
+        'highly-discussed-qs': ('questions', 'both'),
+        'highly-discussed-as': ('answers',   'both'),
+        'interesting-answers': ('answers',   'both'),
+    }
+    if section not in section_mode_map.keys():
+        return flask.abort(404)
+
+    try:
+        args = flask.request.args
+        user_id = int(args['user_id'])
+        frequency = args['frequency']
+        duplicates = json.loads(args.get('duplicates', '{}'))
+    except ValueError or KeyError:
+        return flask.abort(400)
+
+    app.logger.info('GET diverse recommendations - user: %s, section: %s, freq: %s', user_id, section, frequency)
+
+
+    rec_type = 'diverse'
+    rec_mode = section_mode_map[section]
+    results = recommender.recommend(rec_type, section, rec_mode, frequency, user_id, duplicates, logger=app.logger)
 
     app.logger.info('Returned %d results.', len(results))
     return json_response(results)

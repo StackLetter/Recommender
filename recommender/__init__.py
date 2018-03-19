@@ -1,11 +1,13 @@
 import requests
 import json
+import math
+import random
 from datetime import datetime, timedelta
 from pathlib import Path
 from recommender import config
 from sklearn.externals import joblib
 
-from recommender import models, queries, profiles, db
+from recommender import models, queries, profiles, db, utils
 
 # User profile threshold; If smaller, use community profile
 profile_size_threshold = 5
@@ -29,7 +31,7 @@ class PersonalizedRecommender:
 
         # Construct query based on section
         duplicates = dupes.get('question' if content_type == 'questions' else 'answer', [0])
-        query = queries.sections[section]
+        query = queries.build_section(section)
         query_params = {
             'site_id': config.site_id,
             'since': since,
@@ -69,7 +71,111 @@ class PersonalizedRecommender:
 
 
 
-def recommend(section, rec_mode, freq, uid, dupes, logger):
+class DiverseRecommender:
+
+    def __init__(self, user, logger):
+        self.user = user # type: profiles.UserProfile
+        self.logger = logger
+        logger.debug('Using DiverseRecommender')
+
+    def _get_buckets(self, n, interests, expertise):
+        def split_half(lst):
+            half = len(lst) // 2
+            return lst[:half]
+
+        def normalize(lst):
+            total_weight = sum(w for _, w in lst)
+            return [(val, w/total_weight) for val, w in lst]
+
+        tags = normalize(split_half(self.user.get_tags(-1, interests, expertise, weights=True)))
+        topics = normalize(split_half(self.user.get_topics(-1, interests, expertise, weights=True)))
+        tags = [(('tags', val), weight) for val, weight in tags]
+        topics = [(('topics', val), weight) for val, weight in topics]
+
+        return normalize(random.sample(tags, math.ceil(n / 2)) + random.sample(topics, math.floor(n / 2)))
+
+    def _get_recommendations(self, bucket, section, since, dupes, rec_mode, max_size):
+        bucket_type, bucket_id = bucket
+        content_type, profile_mode = rec_mode
+        get_int = profile_mode == 'interests' or profile_mode == 'both'
+        get_exp = profile_mode == 'expertise' or profile_mode == 'both'
+
+        # Construct query based on section and bucket type
+        duplicates = dupes.get('question' if content_type == 'questions' else 'answer', [0])
+        query = queries.build_section(section, bucket_type)
+        query_params = {
+            'site_id': config.site_id,
+            'since': since,
+            'dupes': tuple(duplicates if len(duplicates) > 0 else [0]),
+            bucket_type: bucket_id
+        }
+
+        # Run query
+        with db.connection() as conn:
+            cur = conn.cursor()
+            cur.execute(query, query_params)
+            results = [res[0] for res in cur]
+
+        if not results:
+            return []
+
+        # If questions, match to user and return
+        if content_type == 'questions':
+            return self.user.match_questions([profiles.QuestionProfile(qid) for qid in results], get_int, get_exp)[:max_size]
+
+        # If answers, we have some more work
+        elif content_type == 'answers':
+            # Construct question-answer index
+            with db.connection() as conn:
+                cur = conn.cursor()
+                cur.execute(queries.question_answer_index, {'answers': tuple(results)})
+                qa_index = {qid: aid for qid, aid in cur}
+
+            # Match questions to user
+            qlist = [profiles.QuestionProfile(qid) for qid in qa_index.keys()]
+            qmatches = self.user.match_questions(qlist, get_int, get_exp)
+
+            # Return answers belonging to the matched questions
+            return [(qa_index[qid], score) for qid, score in qmatches[:max_size]]
+        # Something else? Better return nothing at all
+        else:
+            return []
+
+    def _select_from_bucket(self, buckets, rec_lists):
+        bucket, bucket_weight = utils.weighted_choice(buckets)
+        selected_list = rec_lists[bucket]
+        item_count = math.ceil(len(selected_list) * bucket_weight)
+        try:
+            return random.choice(selected_list[:item_count]), bucket
+        except IndexError:
+            return None, None
+
+
+    def recommend(self, rec_mode, section, since, dupes):
+        rec_lst_size = 5
+
+        content_type, profile_mode = rec_mode
+        get_int = profile_mode == 'interests' or profile_mode == 'both'
+        get_exp = profile_mode == 'expertise' or profile_mode == 'both'
+
+        buckets = self._get_buckets(rec_lst_size, get_int, get_exp)
+        rec_lists = {}
+        for bucket, _ in buckets:
+            rec_lists[bucket] = self._get_recommendations(bucket, section, since, dupes, rec_mode, rec_lst_size)
+
+        results = []
+        archive = []
+        while len(results) < rec_lst_size and sum(len(l) for l in rec_lists.values()) > 0:
+            item, bucket = self._select_from_bucket(buckets, rec_lists)
+            if item and item not in results:
+                results.append(item)
+                archive.append((item, bucket))
+        return results, archive
+
+
+
+
+def recommend(recommender_type, section, rec_mode, freq, uid, dupes, logger):
     _, profile_mode = rec_mode
     user = profiles.UserProfile.load(uid)
 
@@ -92,11 +198,17 @@ def recommend(section, rec_mode, freq, uid, dupes, logger):
         user = profiles.CommunityProfile.load()
 
     now = datetime.now()
-    since = now - timedelta(days=8) if freq == 'w' else now - timedelta(days=2)
 
-    rec = PersonalizedRecommender(user, logger)
-    matches = rec.recommend(rec_mode, section, since, dupes)
-    archive_matches(user, matches, section, freq)
+    if recommender_type == 'diverse':
+        since = now - timedelta(days=8) if freq == 'w' else now - timedelta(days=2)
+        rec = DiverseRecommender(user, logger)
+        matches, archive = rec.recommend(rec_mode, section, since, dupes)
+        archive_matches(user, archive, section, 'div_' + freq)
+    else:
+        since = now - timedelta(days=8) if freq == 'w' else now - timedelta(days=2)
+        rec = PersonalizedRecommender(user, logger)
+        matches = rec.recommend(rec_mode, section, since, dupes)
+        archive_matches(user, matches, section, freq)
 
     return [id for id, score in matches]
 

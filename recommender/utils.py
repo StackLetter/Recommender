@@ -1,3 +1,4 @@
+import random
 from pathlib import Path
 import logging
 from logging.handlers import RotatingFileHandler
@@ -28,3 +29,15 @@ def archive_user_profile(user):
     if not archive_dir.exists():
         archive_dir.mkdir(parents=True)
     return user.save(archive_dir / '{}.pkl'.format(user.id))
+
+
+def weighted_choice(choices):
+   total = sum(w for c, w in choices)
+   r = random.uniform(0, total)
+   upto = 0
+   for c, w in choices:
+      if upto + w >= r:
+         return c, w
+      upto += w
+   assert False, "Shouldn't get here"
+

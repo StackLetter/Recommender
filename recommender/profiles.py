@@ -259,7 +259,7 @@ class UserProfile:
         self.since = datetime.now()
         self.iterations += 1
 
-    def _get_profile_list(self, n, key, interests, expertise):
+    def _get_profile_list(self, n, key, interests, expertise, weights):
         interests_list = getattr(self.interests, key)
         expertise_list = getattr(self.expertise, key)
 
@@ -275,13 +275,16 @@ class UserProfile:
         sorted_list, _ = self._sort_wlist(res)
         length = len(sorted_list)
         max_index = min(length, abs(n)) if n != -1 else length
-        return [t for t, _ in sorted_list[:max_index]]
+        if weights:
+            return sorted_list[:max_index]
+        else:
+            return [t for t, _ in sorted_list[:max_index]]
 
-    def get_tags(self, n, interests=True, expertise=True):
-        return self._get_profile_list(n, 'tags', interests, expertise)
+    def get_tags(self, n, interests=True, expertise=True, weights=False):
+        return self._get_profile_list(n, 'tags', interests, expertise, weights)
 
-    def get_topics(self, n, interests=True, expertise=True):
-        return self._get_profile_list(n, 'topics', interests, expertise)
+    def get_topics(self, n, interests=True, expertise=True, weights=False):
+        return self._get_profile_list(n, 'topics', interests, expertise, weights)
 
     def match_questions(self, qlist, interests=True, expertise=True):
         q_index = [q.id for q in qlist]
@@ -299,7 +302,7 @@ class UserProfile:
         # Calc mean values in user matrix along the '0' axis
         u_vector = u_matrix.mean(0)
 
-        # Calc similarity (dot product) of Qs and user, return list of sorted Q-IDs
+        # Calc similarity (dot product) of Qs and user, return list of sorted Q-IDs and weights
         product = u_vector * q_matrix.T
         sorted_list = sorted(zip(q_index, product.A[0]), key=lambda t: t[1], reverse=True)
         return sorted_list

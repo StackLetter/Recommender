@@ -115,15 +115,14 @@ sections = {
         SELECT DISTINCT * FROM (
             SELECT q.id, q.score, q.creation_date
             FROM questions q
-            LEFT JOIN question_tags qt ON qt.question_id = q.id
-            LEFT JOIN mls_question_topics qto ON qto.question_id = q.id
+            {joins}
             WHERE q.site_id = %(site_id)s
             AND q.score > 3
             AND q.closed_date IS NULL
             AND q.id NOT IN %(dupes)s
             AND q.removed IS NULL
             AND q.creation_date > %(since)s
-            AND (qt.tag_id IN %(tags)s OR qto.topic_id IN %(topics)s)
+            {where}
             ) x
         ORDER BY score DESC, creation_date DESC
         LIMIT 500""",
@@ -133,8 +132,7 @@ sections = {
             SELECT q.id, q.score, q.creation_date
             FROM questions q
             LEFT JOIN answers a ON q.id = a.question_id
-            LEFT JOIN question_tags qt ON qt.question_id = q.id
-            LEFT JOIN mls_question_topics qto ON qto.question_id = q.id
+            {joins}
             WHERE q.site_id = %(site_id)s
             AND q.score > 3
             AND q.closed_date IS NULL
@@ -142,7 +140,7 @@ sections = {
             AND q.id NOT IN %(dupes)s
             AND q.removed IS NULL
             AND q.creation_date > %(since)s
-            AND (qt.tag_id IN %(tags)s OR qto.topic_id IN %(topics)s)
+            {where}
             ) x
         ORDER BY score DESC, creation_date DESC
         LIMIT 500""",
@@ -152,8 +150,7 @@ sections = {
             SELECT q.id, q.score, q.creation_date
             FROM questions q
             LEFT JOIN answers a ON q.id = a.question_id
-            LEFT JOIN question_tags qt ON qt.question_id = q.id
-            LEFT JOIN mls_question_topics qto ON qto.question_id = q.id
+            {joins}
             WHERE q.site_id = %(site_id)s
             AND q.score >= 0
             AND q.closed_date IS NULL
@@ -161,7 +158,7 @@ sections = {
             AND q.id NOT IN %(dupes)s
             AND q.removed IS NULL
             AND q.creation_date > %(since)s
-            AND (qt.tag_id IN %(tags)s OR qto.topic_id IN %(topics)s)
+            {where}
             ) x
         ORDER BY score ASC, creation_date DESC
         LIMIT 500""",
@@ -171,8 +168,7 @@ sections = {
             SELECT q.id, q.score, q.creation_date
             FROM questions q
             LEFT JOIN answers a ON q.id = a.question_id
-            LEFT JOIN question_tags qt ON qt.question_id = q.id
-            LEFT JOIN mls_question_topics qto ON qto.question_id = q.id
+            {joins}
             WHERE q.site_id = %(site_id)s
             AND q.score > 1
             AND q.closed_date IS NULL
@@ -180,7 +176,7 @@ sections = {
             AND q.id NOT IN %(dupes)s
             AND q.removed IS NULL
             AND q.creation_date > %(since)s
-            AND (qt.tag_id IN %(tags)s OR qto.topic_id IN %(topics)s)
+            {where}
             ) x
         ORDER BY score DESC, creation_date DESC
         LIMIT 500""",
@@ -189,15 +185,14 @@ sections = {
         SELECT DISTINCT * FROM (
             SELECT q.id, q.comment_count, q.creation_date
             FROM questions q
-            LEFT JOIN question_tags qt ON qt.question_id = q.id
-            LEFT JOIN mls_question_topics qto ON qto.question_id = q.id
+            {joins}
             WHERE q.site_id = %(site_id)s
             AND q.score >= 0
             AND q.id NOT IN %(dupes)s
             AND q.comment_count > 3
             AND q.removed IS NULL
             AND q.creation_date > %(since)s
-            AND (qt.tag_id IN %(tags)s OR qto.topic_id IN %(topics)s)
+            {where}
             ) x
         ORDER BY comment_count DESC, creation_date DESC
         LIMIT 500""",
@@ -207,15 +202,14 @@ sections = {
             SELECT a.id, a.comment_count, a.creation_date
             FROM answers a
             LEFT JOIN questions q ON q.id = a.question_id
-            LEFT JOIN question_tags qt ON qt.question_id = q.id
-            LEFT JOIN mls_question_topics qto ON qto.question_id = q.id
+            {joins}
             WHERE a.site_id = %(site_id)s
             AND a.score >= 0
             AND a.id NOT IN %(dupes)s
             AND a.comment_count > 3
             AND a.removed IS NULL
             AND a.creation_date > %(since)s
-            AND (qt.tag_id IN %(tags)s OR qto.topic_id IN %(topics)s)
+            {where}
             ) x
         ORDER BY comment_count DESC, creation_date DESC
         LIMIT 500""",
@@ -225,15 +219,35 @@ sections = {
             SELECT a.id, a.score, a.creation_date
             FROM answers a
             LEFT JOIN questions q ON q.id = a.question_id
-            LEFT JOIN question_tags qt ON qt.question_id = q.id
-            LEFT JOIN mls_question_topics qto ON qto.question_id = q.id
+            {joins}
             WHERE a.site_id = %(site_id)s
             AND a.id NOT IN %(dupes)s
             AND a.score > 1
             AND a.removed IS NULL
             AND a.creation_date > %(since)s
-            AND (qt.tag_id IN %(tags)s OR qto.topic_id IN %(topics)s)
+            {where}
             ) x
         ORDER BY score DESC, creation_date DESC
         LIMIT 500""",
 }
+
+
+def build_section(section, mode='both'):
+    if section not in sections:
+        raise AttributeError('No such section')
+    query_base = sections[section]
+    joins, where = '', ''
+
+    if mode == 'tags' or mode == 'both':
+        joins += ' LEFT JOIN question_tags qt ON qt.question_id = q.id'
+    if mode == 'topics' or mode == 'both':
+        joins += ' LEFT JOIN mls_question_topics qto ON qto.question_id = q.id'
+
+    if mode == 'tags':
+        where = ' AND qt.tag_id = %(tags)s'
+    elif mode == 'topics':
+        where = ' AND qto.topic_id = %(topics)s'
+    elif mode == 'both':
+        where = ' AND (qt.tag_id IN %(tags)s OR qto.topic_id IN %(topics)s)'
+
+    return query_base.format(joins=joins, where=where)

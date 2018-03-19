@@ -158,11 +158,11 @@ class DiverseRecommender:
         get_int = profile_mode == 'interests' or profile_mode == 'both'
         get_exp = profile_mode == 'expertise' or profile_mode == 'both'
 
-        buckets = self._get_buckets(rec_lst_size, get_int, get_exp)
+        buckets = list(self._get_buckets(rec_lst_size, get_int, get_exp))
         rec_lists = {}
         self.logger.debug('Buckets: %d', len(buckets))
         for bucket, _ in buckets:
-            self.logger.debug('- Bucket: %s - %d', bucket[0][0], bucket[0][1])
+            self.logger.debug('Get recommendations for bucket "%s #%d" (probability: %d)', bucket[0][0], bucket[0][1], bucket[1])
             rec_lists[bucket] = self._get_recommendations(bucket, section, since, dupes, rec_mode, rec_lst_size)
 
         self.logger.debug('Total buckets size: %d', sum(len(l) for l in rec_lists.values()))

@@ -94,7 +94,7 @@ class DiverseRecommender:
 
         return normalize(random.sample(tags, math.ceil(n / 2)) + random.sample(topics, math.floor(n / 2)))
 
-    def _get_recommendations(self, bucket, section, since, dupes, rec_mode, max_size):
+    def _get_recommendations(self, bucket, section, since, dupes, rec_mode):
         bucket_type, bucket_id = bucket
         content_type, profile_mode = rec_mode
         get_int = profile_mode == 'interests' or profile_mode == 'both'
@@ -121,7 +121,7 @@ class DiverseRecommender:
 
         # If questions, match to user and return
         if content_type == 'questions':
-            return self.user.match_questions([profiles.QuestionProfile(qid) for qid in results], get_int, get_exp)[:max_size]
+            return self.user.match_questions([profiles.QuestionProfile(qid) for qid in results], get_int, get_exp)
 
         # If answers, we have some more work
         elif content_type == 'answers':
@@ -136,19 +136,10 @@ class DiverseRecommender:
             qmatches = self.user.match_questions(qlist, get_int, get_exp)
 
             # Return answers belonging to the matched questions
-            return [(qa_index[qid], score) for qid, score in qmatches[:max_size]]
+            return [(qa_index[qid], score) for qid, score in qmatches]
         # Something else? Better return nothing at all
         else:
             return []
-
-    def _select_from_bucket(self, buckets, rec_lists):
-        bucket, bucket_weight = utils.weighted_choice(buckets)
-        selected_list = rec_lists[bucket]
-        item_count = math.ceil(len(selected_list) * bucket_weight)
-        try:
-            return random.choice(selected_list[:item_count]), bucket
-        except IndexError:
-            return None, None
 
 
     def recommend(self, rec_mode, section, since, dupes):
@@ -161,19 +152,24 @@ class DiverseRecommender:
         buckets = list(self._get_buckets(rec_lst_size, get_int, get_exp))
         rec_lists = {}
         self.logger.debug('Buckets: %d', len(buckets))
-        for bucket, _ in buckets:
-            self.logger.debug('Get recommendations for bucket "%s #%d" (probability: %d)', bucket[0][0], bucket[0][1], bucket[1])
-            rec_lists[bucket] = self._get_recommendations(bucket, section, since, dupes, rec_mode, rec_lst_size)
+        for bucket, bucket_weight in buckets:
+            self.logger.debug('Get recommendations for bucket "%s #%d"', bucket[0],  bucket[1])
+            rec_lists[(bucket, bucket_weight)] = self._get_recommendations(bucket, section, since, dupes, rec_mode)
 
         self.logger.debug('Total buckets size: %d', sum(len(l) for l in rec_lists.values()))
 
         results = []
         archive = []
         while len(results) < rec_lst_size and sum(len(l) for l in rec_lists.values()) > 0:
-            item, bucket = self._select_from_bucket(buckets, rec_lists)
-            if item and item not in results:
-                results.append(item)
-                archive.append((item, bucket))
+            key = utils.weighted_choice(rec_lists.keys())
+            self.logger.debug('Choose from %s #%d, size: %d', key[0][0], key[0][1], len(rec_lists[key]))
+            if len(rec_lists[key]) > 0:
+                item = rec_lists[key].pop(0)
+                if item not in results:
+                    results.append(item)
+                    archive.append((item, key[0]))
+            else:
+                del rec_lists[key]
         return results, archive
 
 

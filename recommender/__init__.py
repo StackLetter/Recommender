@@ -145,7 +145,7 @@ class DiverseRecommender:
     def get_personalized(self, rec_mode, section, since, dupes, results):
         # Add results to duplicates
         content_type = rec_mode[0]
-        dupes[content_type + 's'].extend([id for id, _ in results])
+        dupes[content_type[:-1]].extend([id for id, _ in results])
 
         rec = PersonalizedRecommender(self.user, self.logger)
         return rec.recommend(rec_mode, section, since, dupes)

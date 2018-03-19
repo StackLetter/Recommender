@@ -11,6 +11,7 @@ from recommender import models, queries, profiles, db, utils
 
 # User profile threshold; If smaller, use community profile
 profile_size_threshold = 5
+rec_lst_size = 5
 
 
 class PersonalizedRecommender:
@@ -143,17 +144,13 @@ class DiverseRecommender:
 
 
     def get_personalized(self, rec_mode, section, since, dupes, results):
-        # Add results to duplicates
         content_type = rec_mode[0]
-        dupes[content_type[:-1]].extend([id for id, _ in results])
-
+        dupes.get(content_type[:-1], []).extend([id for id, _ in results])
         rec = PersonalizedRecommender(self.user, self.logger)
         return rec.recommend(rec_mode, section, since, dupes)
 
 
-
     def recommend(self, rec_mode, section, since, dupes):
-        rec_lst_size = 5
 
         content_type, profile_mode = rec_mode
         get_int = profile_mode == 'interests' or profile_mode == 'both'
@@ -166,20 +163,18 @@ class DiverseRecommender:
             self.logger.debug('Get recommendations for bucket "%s #%d"', bucket[0],  bucket[1])
             rec_lists[(bucket, bucket_weight)] = self.get_recommendations(bucket, section, since, dupes, rec_mode)
 
-        self.logger.debug('Total buckets size: %d', sum(len(l) for l in rec_lists.values()))
+        total_size = lambda: sum(len(l) for l in rec_lists.values())
+        self.logger.debug('Total results: %d', total_size())
 
-        results = []
-        archive = []
-        while len(results) < rec_lst_size and sum(len(l) for l in rec_lists.values()) > 0:
+        results, archive = [], []
+        while len(results) < rec_lst_size and total_size() > 0:
             key = utils.weighted_choice(rec_lists.keys())
             if len(rec_lists[key]) > 0:
-                self.logger.debug('Choose from %s #%d, size: %d', key[0][0], key[0][1], len(rec_lists[key]))
                 item = rec_lists[key].pop(0)
                 if item not in results:
                     results.append(item)
                     archive.append((item, key[0]))
             else:
-                self.logger.debug('Remove bucket %s #%d', key[0][0], key[0][1])
                 del rec_lists[key]
 
         if len(results) < rec_lst_size:

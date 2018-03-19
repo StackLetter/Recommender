@@ -160,8 +160,11 @@ class DiverseRecommender:
 
         buckets = self._get_buckets(rec_lst_size, get_int, get_exp)
         rec_lists = {}
+        self.logger.debug('Buckets (%d) %s:', len(buckets), ' '.join('-'.join(b) for b, _ in buckets))
         for bucket, _ in buckets:
             rec_lists[bucket] = self._get_recommendations(bucket, section, since, dupes, rec_mode, rec_lst_size)
+
+        self.logger.debug('Total buckets size: %d', sum(len(l) for l in rec_lists.values()))
 
         results = []
         archive = []

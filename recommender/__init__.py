@@ -78,9 +78,9 @@ class DiverseRecommender:
         self.logger = logger
         logger.debug('Using DiverseRecommender')
 
-    def _get_buckets(self, n, interests, expertise):
+    def get_buckets(self, n, interests, expertise):
         def split_half(lst):
-            half = len(lst) // 2
+            half = max(5, len(lst) // 2)
             return lst[:half]
 
         def normalize(lst):
@@ -94,7 +94,7 @@ class DiverseRecommender:
 
         return normalize(random.sample(tags, math.ceil(n / 2)) + random.sample(topics, math.floor(n / 2)))
 
-    def _get_recommendations(self, bucket, section, since, dupes, rec_mode):
+    def get_recommendations(self, bucket, section, since, dupes, rec_mode):
         bucket_type, bucket_id = bucket
         content_type, profile_mode = rec_mode
         get_int = profile_mode == 'interests' or profile_mode == 'both'
@@ -142,6 +142,16 @@ class DiverseRecommender:
             return []
 
 
+    def get_personalized(self, rec_mode, section, since, dupes, results):
+        # Add results to duplicates
+        content_type = rec_mode[0]
+        dupes[content_type + 's'].extend([id for id, _ in results])
+
+        rec = PersonalizedRecommender(self.user, self.logger)
+        return rec.recommend(rec_mode, section, since, dupes)
+
+
+
     def recommend(self, rec_mode, section, since, dupes):
         rec_lst_size = 5
 
@@ -149,12 +159,12 @@ class DiverseRecommender:
         get_int = profile_mode == 'interests' or profile_mode == 'both'
         get_exp = profile_mode == 'expertise' or profile_mode == 'both'
 
-        buckets = list(self._get_buckets(rec_lst_size, get_int, get_exp))
+        buckets = list(self.get_buckets(rec_lst_size, get_int, get_exp))
         rec_lists = {}
         self.logger.debug('Buckets: %d', len(buckets))
         for bucket, bucket_weight in buckets:
             self.logger.debug('Get recommendations for bucket "%s #%d"', bucket[0],  bucket[1])
-            rec_lists[(bucket, bucket_weight)] = self._get_recommendations(bucket, section, since, dupes, rec_mode)
+            rec_lists[(bucket, bucket_weight)] = self.get_recommendations(bucket, section, since, dupes, rec_mode)
 
         self.logger.debug('Total buckets size: %d', sum(len(l) for l in rec_lists.values()))
 
@@ -162,14 +172,24 @@ class DiverseRecommender:
         archive = []
         while len(results) < rec_lst_size and sum(len(l) for l in rec_lists.values()) > 0:
             key = utils.weighted_choice(rec_lists.keys())
-            self.logger.debug('Choose from %s #%d, size: %d', key[0][0], key[0][1], len(rec_lists[key]))
             if len(rec_lists[key]) > 0:
+                self.logger.debug('Choose from %s #%d, size: %d', key[0][0], key[0][1], len(rec_lists[key]))
                 item = rec_lists[key].pop(0)
                 if item not in results:
                     results.append(item)
                     archive.append((item, key[0]))
             else:
+                self.logger.debug('Remove bucket %s #%d', key[0][0], key[0][1])
                 del rec_lists[key]
+
+        if len(results) < rec_lst_size:
+            self.logger.debug('Not enough results, filling up with non-diversified')
+            cnt = rec_lst_size - len(results)
+            more_results = self.get_personalized(rec_mode, section, since, dupes, results)[:cnt]
+            results.extend(more_results)
+            for res in more_results:
+                archive.append((res, ('personalized', None)))
+
         return results, archive
 
 
@@ -200,24 +220,24 @@ def recommend(recommender_type, section, rec_mode, freq, uid, dupes, logger):
     now = datetime.now()
 
     if recommender_type == 'diverse':
-        since = now - timedelta(days=8) if freq == 'w' else now - timedelta(days=2)
+        since = now - timedelta(days=13) if freq == 'w' else now - timedelta(days=3)
         rec = DiverseRecommender(user, logger)
         matches, archive = rec.recommend(rec_mode, section, since, dupes)
-        archive_matches(user, archive, section, 'div_' + freq)
+        archive_matches(uid, archive, section, 'div_' + freq)
     else:
         since = now - timedelta(days=8) if freq == 'w' else now - timedelta(days=2)
         rec = PersonalizedRecommender(user, logger)
         matches = rec.recommend(rec_mode, section, since, dupes)
-        archive_matches(user, matches, section, freq)
+        archive_matches(uid, matches, section, freq)
 
     return [id for id, score in matches]
 
 
-def archive_matches(user, matches, section, freq):
+def archive_matches(user_id, matches, section, freq):
     archive_dir = Path('.') / config.archive_dir / '{:%Y-%m-%d}'.format(datetime.now()) / 'matches'
     if not archive_dir.exists():
         archive_dir.mkdir(parents=True)
-    filepath = archive_dir / '{}_{}_{}.pkl'.format(freq, user.id, section)
+    filepath = archive_dir / '{}_{}_{}.pkl'.format(freq, user_id, section)
     joblib.dump(matches, filepath)
 
 

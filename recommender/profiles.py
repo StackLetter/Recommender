@@ -110,15 +110,17 @@ class UserProfile:
         accepted_as = self._get_question_profiles(answer_query_base + ' AND is_accepted', since)
 
         feedback_query_base = queries.user_profile['feedback_query_base']
-        implicit_fb = self._get_question_profiles(feedback_query_base.format(fb='click'), since, since_table='e.')
-        explicit_fb = self._get_question_profiles(feedback_query_base.format(fb='feedback'), since, since_table='e.')
+        implicit_fb = self._get_question_profiles(feedback_query_base.format(fb='click', val='IS NULL'), since, since_table='e.')
+        explicit_pos = self._get_question_profiles(feedback_query_base.format(fb='feedback', val='= 1'), since, since_table='e.')
+        explicit_neg = self._get_question_profiles(feedback_query_base.format(fb='feedback', val='= -1'), since, since_table='e.')
 
         interests = [
             (asked_qs,      1.00),
             (commented_qs,  0.30),
             (favorited_qs,  1.00),
             (implicit_fb,   0.30),
-            (explicit_fb,   1.00),
+            (explicit_pos,  1.00),
+            (explicit_neg, -1.00),
         ]
         expertise = [
             (positive_as,   1.00),
@@ -127,7 +129,8 @@ class UserProfile:
             (commented_qs,  0.30),
             (favorited_qs,  1.00),
             (implicit_fb,   0.30),
-            (explicit_fb,   1.00),
+            (explicit_pos,  1.00),
+            (explicit_neg, -1.00),
         ]
         return interests, expertise
 

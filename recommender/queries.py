@@ -103,6 +103,7 @@ user_profile = {
         WHERE n.user_id = %(user_id)s
         AND e.content_type = 'answer'
         AND e.user_response_type = '{fb}'
+        AND e.user_response_detail {val}
         {{since}}""",
 
     'community_asked_qs': 'SELECT id FROM questions WHERE removed IS NULL {since}',

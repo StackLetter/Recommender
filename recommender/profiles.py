@@ -149,10 +149,10 @@ class UserProfile:
         return list(res.items()), sum_w
 
     def _merge_matrices(self, old, new, decay_factor=1.0):
-        if old:
+        if old and new:
             return sparse.bmat([[old * decay_factor], [new]])
         else:
-            return new
+            return new if new else False
 
     def _get_tag_weights(self, weighted_qlists):
         tag_counts = Counter()

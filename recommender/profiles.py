@@ -152,7 +152,7 @@ class UserProfile:
         if old is not None and new is not None:
             return sparse.bmat([[old * decay_factor], [new]])
         else:
-            return new if new is not None else False
+            return new
 
     def _get_tag_weights(self, weighted_qlists):
         tag_counts = Counter()

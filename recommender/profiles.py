@@ -206,8 +206,8 @@ class UserProfile:
     def _calculate_tfidf(self, tf):
         return TfidfTransformer().fit_transform(tf)
 
-    def train(self, since=None):
-        int_qlists, exp_qlists = self._get_qlists(since)
+    def train(self):
+        int_qlists, exp_qlists = self._get_qlists()
 
         self.interests.tags = self._get_tag_weights(int_qlists)
         self.expertise.tags = self._get_tag_weights(exp_qlists)
@@ -224,7 +224,7 @@ class UserProfile:
         self.interests.total = self._sum_weighted_qlists(int_qlists)
         self.expertise.total = self._sum_weighted_qlists(exp_qlists)
 
-        self.since = since if since else datetime.now()
+        self.since = datetime.now()
         self.iterations += 1
 
     def retrain(self, since=None):

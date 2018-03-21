@@ -24,10 +24,8 @@ def setup_logging(log_file, logger=None):
     return logger
 
 
-def archive_user_profile(user, when=None):
-    if not when:
-        when = datetime.now()
-    archive_dir = Path('.') / config.archive_dir / '{:%Y-%m-%d}'.format(when)
+def archive_user_profile(user):
+    archive_dir = Path('.') / config.archive_dir / '{:%Y-%m-%d}'.format(datetime.now())
     if not archive_dir.exists():
         archive_dir.mkdir(parents=True)
     return user.save(archive_dir / '{}.pkl'.format(user.id))

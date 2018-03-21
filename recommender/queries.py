@@ -95,6 +95,7 @@ user_profile = {
         WHERE n.user_id = %(user_id)s
         AND e.content_type = 'question'
         AND e.user_response_type = '{fb}'
+        AND e.user_response_detail::int {val}
         {{since}}
         UNION
         SELECT a.question_id FROM evaluation_newsletters e
@@ -103,7 +104,7 @@ user_profile = {
         WHERE n.user_id = %(user_id)s
         AND e.content_type = 'answer'
         AND e.user_response_type = '{fb}'
-        AND e.user_response_detail {val}
+        AND e.user_response_detail::int {val}
         {{since}}""",
 
     'community_asked_qs': 'SELECT id FROM questions WHERE removed IS NULL {since}',

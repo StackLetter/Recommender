@@ -89,9 +89,9 @@ class UserProfile:
                 self.__topics = [topic[0] for topic in cur]
             return self.__topics
 
-    def _get_question_profiles(self, question_query, since=None, since_table=''):
+    def _get_question_profiles(self, question_query, since=None, since_table='', rev=False):
         params = {'user_id': self.id}
-        since_query = 'AND {}created_at > %(since)s'.format(since_table) if since else ''
+        since_query = 'AND {}created_at {} %(since)s'.format(since_table, '<' if rev else '>') if since else ''
         if since:
             params['since'] = since
         with db.connection() as conn:
@@ -99,20 +99,20 @@ class UserProfile:
             cur.execute(question_query.format(since=since_query), params)
             return [QuestionProfile(question[0]) for question in cur]
 
-    def _get_qlists(self, since=None):
-        asked_qs = self._get_question_profiles(queries.user_profile['asked_qs'], since)
-        commented_qs = self._get_question_profiles(queries.user_profile['commented_qs'], since)
+    def _get_qlists(self, since=None, rev=False):
+        asked_qs = self._get_question_profiles(queries.user_profile['asked_qs'], since, rev=rev)
+        commented_qs = self._get_question_profiles(queries.user_profile['commented_qs'], since, rev=rev)
         favorited_qs = self._get_question_profiles(queries.user_profile['favorited_qs'], since, since_table='f.')
 
         answer_query_base = queries.user_profile['answer_query_base']
-        positive_as = self._get_question_profiles(answer_query_base + ' AND score >= 0', since)
-        negative_as = self._get_question_profiles(answer_query_base + ' AND score < 0', since)
-        accepted_as = self._get_question_profiles(answer_query_base + ' AND is_accepted', since)
+        positive_as = self._get_question_profiles(answer_query_base + ' AND score >= 0', since, rev=rev)
+        negative_as = self._get_question_profiles(answer_query_base + ' AND score < 0', since, rev=rev)
+        accepted_as = self._get_question_profiles(answer_query_base + ' AND is_accepted', since, rev=rev)
 
-        feedback_query_base = queries.user_profile['feedback_query_base']
-        implicit_fb = self._get_question_profiles(feedback_query_base.format(fb='click', val='IS NULL'), since, since_table='e.')
-        explicit_pos = self._get_question_profiles(feedback_query_base.format(fb='feedback', val='= 1'), since, since_table='e.')
-        explicit_neg = self._get_question_profiles(feedback_query_base.format(fb='feedback', val='= -1'), since, since_table='e.')
+        fb_query_base = queries.user_profile['feedback_query_base']
+        implicit_fb = self._get_question_profiles(fb_query_base.format(fb='click', val='IS NULL'), since, since_table='e.', rev=rev)
+        explicit_pos = self._get_question_profiles(fb_query_base.format(fb='feedback', val='= 1'), since, since_table='e.', rev=rev)
+        explicit_neg = self._get_question_profiles(fb_query_base.format(fb='feedback', val='= -1'), since, since_table='e.', rev=rev)
 
         interests = [
             (asked_qs,      1.00),
@@ -206,8 +206,11 @@ class UserProfile:
     def _calculate_tfidf(self, tf):
         return TfidfTransformer().fit_transform(tf)
 
-    def train(self):
-        int_qlists, exp_qlists = self._get_qlists()
+    def train(self, at_time=None):
+        if at_time:
+            int_qlists, exp_qlists = self._get_qlists(at_time, rev=True)
+        else:
+            int_qlists, exp_qlists = self._get_qlists()
 
         self.interests.tags = self._get_tag_weights(int_qlists)
         self.expertise.tags = self._get_tag_weights(exp_qlists)
@@ -224,7 +227,7 @@ class UserProfile:
         self.interests.total = self._sum_weighted_qlists(int_qlists)
         self.expertise.total = self._sum_weighted_qlists(exp_qlists)
 
-        self.since = datetime.now()
+        self.since = at_time if at_time else datetime.now()
         self.iterations += 1
 
     def retrain(self, since=None):
@@ -321,15 +324,15 @@ class CommunityProfile(UserProfile):
         self.interests = SimpleNamespace(tags=None, topics=None, terms=None, tfidf=None, total=0)
         self.expertise = SimpleNamespace(tags=None, topics=None, terms=None, tfidf=None, total=0)
 
-    def _get_qlists(self, since=None):
+    def _get_qlists(self, since=None, rev=False):
         if since is None:
             since = datetime.now() - timedelta(days=10)
-        asked_qs = self._get_question_profiles(queries.user_profile['community_asked_qs'], since)
+        asked_qs = self._get_question_profiles(queries.user_profile['community_asked_qs'], since, rev=rev)
 
         answer_query_base = queries.user_profile['community_answer_query_base']
-        positive_as = self._get_question_profiles(answer_query_base + ' AND score >= 0', since)
-        negative_as = self._get_question_profiles(answer_query_base + ' AND score < 0', since)
-        accepted_as = self._get_question_profiles(answer_query_base + ' AND is_accepted', since)
+        positive_as = self._get_question_profiles(answer_query_base + ' AND score >= 0', since, rev=rev)
+        negative_as = self._get_question_profiles(answer_query_base + ' AND score < 0', since, rev=rev)
+        accepted_as = self._get_question_profiles(answer_query_base + ' AND is_accepted', since, rev=rev)
 
         interests = [(asked_qs, 1.00)]
         expertise = [

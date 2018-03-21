@@ -46,7 +46,7 @@ all_questions_since = """
 SELECT id, title, body FROM questions
 WHERE site_id = %s AND removed IS NULL
 AND created_at >= now() - interval '%s days'
-AND id NOT IN (SELECT DISTINCT question_id FROM mls_question_topics)"""
+AND id NOT IN (SELECT DISTINCT question_id FROM mls_question_topics WHERE created_at >= now() - interval '%s days')"""
 
 daily_subscribers = """
 SELECT u.id FROM users u LEFT JOIN accounts a ON u.account_id = a.id

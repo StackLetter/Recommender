@@ -341,4 +341,10 @@ class CommunityProfile(UserProfile):
 
     @classmethod
     def load(cls):
-        return UserProfile.load('community')
+        model_file = Path('.') / config.models['dir'] / config.models['user-dir'] / 'community.pkl'
+        if model_file.exists():
+            try:
+                return joblib.load(model_file)
+            except:
+                return cls()
+        return cls()

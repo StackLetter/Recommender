@@ -15,7 +15,7 @@ def create_question_profiles(query, args):
 
 def run_daily_cron(logger):
     logger.info('Creating question profiles from last 2 days')
-    cnt = create_question_profiles(queries.all_questions_since, (config.site_id, 2))
+    cnt = create_question_profiles(queries.all_questions_since, (config.site_id, 2, 2))
     logger.debug('Created %d profiles', cnt)
 
     logger.info('Creating profiles for all user activities')

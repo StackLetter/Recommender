@@ -14,7 +14,7 @@ from recommender import train, db, config, queries
 
 with db.connection() as conn:
     cur = conn.cursor()
-    cur.execute(queries.all_questions_since, (config.site_id, days))
+    cur.execute(queries.all_questions_since, (config.site_id, days, days))
 
     i = 0
     for question in cur:

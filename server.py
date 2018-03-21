@@ -1,4 +1,5 @@
 import os
+from datetime import datetime
 import flask, json
 import rollbar
 import rollbar.contrib.flask
@@ -84,61 +85,19 @@ def get_recommendations(section):
 
     app.logger.info('GET recommendations - user: %s, section: %s, freq: %s', user_id, section, frequency)
 
-    rec_type = 'personalized'
+    # Choose recommender in A/B test based on date
+    _, week, day = datetime.now().isocalendar()
+    week_even = week % 2 == 0
+    if (week_even and day > 3) or (not week_even and day <= 3):
+        rec_type = 'diverse'
+    else:
+        rec_type = 'personalized'
+
     rec_mode = section_mode_map[section]
     results = recommender.recommend(rec_type, section, rec_mode, frequency, user_id, duplicates, logger=app.logger)
 
     app.logger.info('Returned %d results.', len(results))
     return json_response(results)
-
-
-@app.route('/recommend-diverse/<string:section>/')
-def get_diverse_recommendations(section):
-    section_mode_map = {
-        'hot-questions':       ('questions', 'interests'),
-        'useful-questions':    ('questions', 'interests'),
-        'awaiting-answer':     ('questions', 'expertise'),
-        'popular-unanswered':  ('questions', 'expertise'),
-        'highly-discussed-qs': ('questions', 'both'),
-        'highly-discussed-as': ('answers',   'both'),
-        'interesting-answers': ('answers',   'both'),
-    }
-    if section not in section_mode_map.keys():
-        return flask.abort(404)
-
-    try:
-        args = flask.request.args
-        user_id = int(args['user_id'])
-        frequency = args['frequency']
-        duplicates = json.loads(args.get('duplicates', '{}'))
-    except ValueError or KeyError:
-        return flask.abort(400)
-
-    app.logger.info('GET diverse recommendations - user: %s, section: %s, freq: %s', user_id, section, frequency)
-
-
-    rec_type = 'diverse'
-    rec_mode = section_mode_map[section]
-    results = recommender.recommend(rec_type, section, rec_mode, frequency, user_id, duplicates, logger=app.logger)
-
-    app.logger.info('Returned %d results.', len(results))
-    return json_response(results)
-
-
-
-@app.route('/test-db')
-def test_db():
-    with recommender.db.connection() as conn:
-        cur = conn.cursor()
-        cur.execute('SELECT id, display_name FROM users WHERE account_id IS NOT NULL')
-        data = {id: name for id, name in cur}
-
-    with recommender.db.connection() as conn:
-        cur = conn.cursor()
-        cur.execute('SELECT id FROM users WHERE account_id IS NOT NULL')
-        data2 = [u[0] for u in cur]
-
-    return json_response([data, data2])
 
 
 @app.teardown_appcontext

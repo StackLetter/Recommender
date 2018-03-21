@@ -149,10 +149,10 @@ class UserProfile:
         return list(res.items()), sum_w
 
     def _merge_matrices(self, old, new, decay_factor=1.0):
-        if old and new:
+        if old is not None and new is not None:
             return sparse.bmat([[old * decay_factor], [new]])
         else:
-            return new if new else False
+            return new if new is not None else False
 
     def _get_tag_weights(self, weighted_qlists):
         tag_counts = Counter()
@@ -204,7 +204,7 @@ class UserProfile:
         # Flatten Q list
         weighted_questions = [(q, weight) for qlist, weight in weighted_qlists for q in qlist]
         if len(weighted_questions) == 0:
-            return False
+            return None
 
         # Create TF matrix while applying Q weights
         return sparse.vstack(itertools.starmap(operator.mul, ((q.terms(), w) for q, w in weighted_questions)), 'csr')

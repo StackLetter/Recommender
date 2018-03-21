@@ -146,7 +146,7 @@ class UserProfile:
         res = Counter({k: v * old[1] * decay_factor for k, v in old[0]})
         for k, v in new[0]:
             res[k] += v * new[1] / sum_w
-        return res.items(), sum_w
+        return list(res.items()), sum_w
 
     def _get_tag_weights(self, weighted_qlists):
         tag_counts = Counter()

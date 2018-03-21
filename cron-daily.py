@@ -34,7 +34,7 @@ def run_daily_cron(logger):
             user.save()
             utils.archive_user_profile(user)
             i+=1
-    logger.debug('Retrained %d user profiles')
+    logger.debug('Retrained %d user profiles', i)
 
     # 4) Retrain community user profile
     logger.info('Retraining community profile')

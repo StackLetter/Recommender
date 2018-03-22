@@ -39,5 +39,5 @@ def weighted_choice(choices):
       if upto + w >= r:
          return c, w
       upto += w
-   assert False, "Shouldn't get here"
+   return choices[0] if len(choices) else False
 

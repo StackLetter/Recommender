@@ -226,7 +226,7 @@ def recommend(recommender_type, section, rec_mode, freq, uid, dupes, logger):
         # Control group: Generate personalized recs as well to compare metrics
         logger.debug('Generating control data using PersonalizedRecommender')
         _rec = PersonalizedRecommender(user, utils.NonLogger())
-        archive_matches(uid, _rec.recommend(rec_mode, section, since, dupes), section, 'div_ctl_' + freq)
+        archive_matches(uid, _rec.recommend(rec_mode, section, since, dupes), section, 'ctl_' + freq)
     else:
         since = now - timedelta(days=8) if freq == 'w' else now - timedelta(days=2)
         rec = PersonalizedRecommender(user, logger)

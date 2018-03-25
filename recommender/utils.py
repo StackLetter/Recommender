@@ -41,3 +41,9 @@ def weighted_choice(choices):
       upto += w
    return choices[0] if len(choices) else False
 
+
+class NonLogger:
+    def __getattr__(self, name):
+        def noop(*args, **kwargs):
+            pass
+        return noop

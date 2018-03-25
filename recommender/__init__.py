@@ -166,14 +166,15 @@ class DiverseRecommender:
         total_size = lambda: sum(len(l) for l in rec_lists.values())
         self.logger.debug('Total results: %d', total_size())
 
-        results, archive = [], []
+        results, archive, ids = [], [], []
         while len(results) < rec_lst_size and total_size() > 0:
             key = utils.weighted_choice(rec_lists.keys())
             if not key:
                 break
             if len(rec_lists[key]) > 0:
                 item = rec_lists[key].pop(0)
-                if item not in results:
+                if item[0] not in ids:
+                    ids.append(item[0])
                     results.append(item)
                     archive.append((item, key[0]))
             else:

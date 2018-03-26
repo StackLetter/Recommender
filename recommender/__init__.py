@@ -168,7 +168,7 @@ class DiverseRecommender:
 
         results, archive, ids = [], [], []
         while len(results) < rec_lst_size and total_size() > 0:
-            key = utils.weighted_choice(rec_lists.keys())
+            key = utils.weighted_choice(list(rec_lists.keys()))
             if not key:
                 break
             if len(rec_lists[key]) > 0:

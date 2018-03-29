@@ -81,7 +81,7 @@ class DiverseRecommender:
 
     def get_buckets(self, n, interests, expertise):
         def split_half(lst):
-            half = max(5, len(lst) // 2)
+            half = max(5, len(lst) // 4)
             return lst[:half]
 
         def normalize(lst):

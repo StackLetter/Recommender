@@ -93,7 +93,7 @@ class DiverseRecommender:
         tags = [(('tags', val), weight) for val, weight in tags]
         topics = [(('topics', val), weight) for val, weight in topics]
 
-        return normalize(random.sample(tags, math.ceil(n / 2)) + random.sample(topics, math.floor(n / 2)))
+        return normalize(random.sample(tags, n - 1) + random.sample(topics, 1))
 
     def get_recommendations(self, bucket, section, since, dupes, rec_mode):
         bucket_type, bucket_id = bucket
